@@ -1,0 +1,42 @@
+# quant-stack — Project settings
+# Override only what differs from default.yaml.
+# See config/default.yaml for all available options and documentation.
+
+data:
+  cache_dir: ./data
+  default_provider: yahoo
+  default_start: "2018-01-01"
+  default_end: "2024-12-31"
+  adjust_prices: true
+  fill_method: ffill
+  fill_limit: 5
+
+strategy:
+  default_freq: "1D"
+  universe: [SPY, QQQ, IEF, GLD]
+  lookback_days: 252
+
+portfolio:
+  method: max_sharpe
+  risk_free_rate: 0.05
+  weight_bounds: [0.0, 0.40]
+  rebalance_freq: monthly
+
+backtest:
+  initial_cash: 100000
+  commission: 0.001
+  slippage: 0.001
+  freq: "1D"
+
+reporting:
+  output_dir: ./reports
+  formats: [markdown]
+  include_plots: false
+
+execution:
+  mode: paper
+  lean_config_path: ./lean/config.json
+  risk:
+    max_position_size: 0.40
+    max_drawdown_halt: 0.15
+    daily_loss_limit: 0.03

@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quant-stack"
+version = "0.1.0"
+description = "Agent-Assisted Quant Research & Deployment Stack"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+dependencies = [
+    # Core
+    "pandas>=2.1",
+    "numpy>=1.26",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    # CLI
+    "typer>=0.9",
+    "rich>=13.7",
+    # Config / Env
+    "PyYAML>=6.0",
+    "python-dotenv>=1.0",
+    # Logging
+    "loguru>=0.7",
+    # Data
+    "yfinance>=0.2.36",
+    "pyarrow>=14.0",
+    # Agent (Anthropic Claude)
+    "anthropic>=0.34",
+]
+
+[project.optional-dependencies]
+research = [
+    "vectorbt>=0.25",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+]
+portfolio = [
+    "PyPortfolioOpt>=1.5",
+    "cvxpy>=1.4",
+]
+polars = [
+    "polars>=0.20",
+    "pyarrow>=14.0",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.0",
+    "ruff>=0.2",
+    "mypy>=1.8",
+    "pandas-stubs>=2.1",
+]
+all = [
+    "quant-stack[research,portfolio,polars,dev]",
+]
+
+[project.scripts]
+quant = "quant_stack.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quant_stack"]
+
+# ---------- Ruff ----------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "ANN", "B", "SIM"]
+ignore = ["ANN101", "ANN102"]
+
+# ---------- Mypy ----------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+# ---------- Pytest ----------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

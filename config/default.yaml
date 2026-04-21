@@ -1,0 +1,113 @@
+# =============================================================================
+# quant-stack — Reference Configuration (default.yaml)
+#
+# This file documents every available setting with its default value and
+# accepted options. Copy to settings.yaml and override what you need.
+#
+# Loading: from quant_stack.core.config import load_config
+#          cfg = load_config("config/settings.yaml")
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# data — Controls how market data is fetched and cached
+# -----------------------------------------------------------------------------
+data:
+  cache_dir: ./data                  # Local directory for parquet cache files
+
+  default_provider: yahoo            # "yahoo"  — yfinance (internet required)
+                                     # "csv"    — local files in cache_dir
+
+  default_start: "2015-01-01"        # ISO-8601 date; used when start is omitted
+  default_end:   "2024-12-31"        # ISO-8601 date; used when end is omitted
+
+  adjust_prices: true                # Apply split/dividend adjustment to OHLCV
+
+  fill_method: ffill                 # "ffill"  — forward-fill missing bars
+                                     # "bfill"  — backward-fill
+                                     # "none"   — leave NaN as-is
+  fill_limit: 5                      # Max consecutive bars to fill (0 = unlimited)
+
+
+# -----------------------------------------------------------------------------
+# strategy — Strategy-level defaults shared by all research runs
+# -----------------------------------------------------------------------------
+strategy:
+  default_freq: "1D"                 # Bar frequency: "1D" | "1W" | "1M"
+                                     # Must match the data cadence
+
+  universe: []                       # Default symbol universe; override per-run
+                                     # e.g. [SPY, QQQ, IEF, GLD, VNQ]
+
+  lookback_days: 252                 # Rolling window for indicators (≈ 1 trading year)
+
+
+# -----------------------------------------------------------------------------
+# portfolio — Mean-variance optimisation defaults
+# -----------------------------------------------------------------------------
+portfolio:
+  method: max_sharpe                 # "max_sharpe"      — maximise Sharpe ratio
+                                     # "min_volatility"  — minimise portfolio σ
+                                     # "efficient_risk"  — target σ (needs target_volatility)
+
+  risk_free_rate: 0.05               # Annual risk-free rate for Sharpe calculation
+
+  weight_bounds: [0.0, 0.4]          # [min_weight, max_weight] per asset
+                                     # 0.4 = max 40% in any single position
+
+  target_volatility: null            # Required when method=efficient_risk
+                                     # e.g. 0.12  (12% annualised σ target)
+
+  rebalance_freq: monthly            # "daily" | "weekly" | "monthly" | "quarterly"
+                                     # Used by orchestrator to schedule rebalancing
+
+
+# -----------------------------------------------------------------------------
+# backtest — Simulation parameters (vectorbt / paper trading)
+# -----------------------------------------------------------------------------
+backtest:
+  initial_cash: 100000               # Starting capital in base currency (USD)
+
+  commission: 0.001                  # Round-trip cost per trade as a fraction
+                                     # 0.001 = 0.1% (typical retail broker)
+                                     # Set realistic values — don't pretend it's free
+
+  slippage: 0.001                    # Market-impact slippage per trade (fraction)
+                                     # Represents bid-ask spread + price impact
+
+  freq: "1D"                         # Simulation frequency (must match data freq)
+
+
+# -----------------------------------------------------------------------------
+# reporting — Output and artefact generation
+# -----------------------------------------------------------------------------
+reporting:
+  output_dir: ./reports              # Where reports and ExperimentRecords are saved
+
+  formats: [markdown]                # List of output formats:
+                                     # "markdown" | "html" | "json"
+
+  include_plots: false               # Generate matplotlib charts in reports
+                                     # Requires matplotlib (research extra)
+
+
+# -----------------------------------------------------------------------------
+# execution — Live / paper order routing (LEAN bridge)
+# -----------------------------------------------------------------------------
+execution:
+  mode: paper                        # "paper" — simulate orders, no real capital
+                                     # "live"  — real orders via LEAN (requires config)
+
+  lean_config_path: ./lean/config.json  # Path to LEAN broker configuration
+
+  # ── Hard risk controls ────────────────────────────────────────────────────
+  # These are enforced by the execution layer before every order.
+  # Breaching any limit causes all new orders to be blocked.
+  # Research and portfolio layers must NOT reference these values.
+  risk:
+    max_position_size: 0.40          # Max NAV fraction in any single symbol
+                                     # Overrides portfolio weight_bounds for safety
+
+    max_drawdown_halt: 0.15          # Halt if portfolio drawdown from peak > 15%
+                                     # Must be > daily_loss_limit
+
+    daily_loss_limit: 0.03           # Halt if intraday P&L loss > 3% of NAV
