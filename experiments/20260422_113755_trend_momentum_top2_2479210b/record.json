@@ -1,0 +1,89 @@
+{
+  "experiment_id": "2479210b-47f2-4d7a-ad4e-7848ed16e398",
+  "created_at": "2026-04-22T11:37:55.561411",
+  "description": "Dual-filter momentum strategy: SMA-200 trend eligibility + 63-day cross-sectional momentum ranking. Top-2 assets, monthly rebalancing.",
+  "config_snapshot": {},
+  "strategy_params": {
+    "momentum_window": 63,
+    "trend_window": 200,
+    "top_n": 2,
+    "rebalance_freq": "ME",
+    "commission_bps": 10
+  },
+  "symbols": [
+    "SPY",
+    "QQQ",
+    "IWM",
+    "EFA",
+    "IEF"
+  ],
+  "period_start": "2018-01-02",
+  "period_end": "2023-10-02",
+  "backtest_result": {
+    "strategy_name": "trend_momentum_top2",
+    "symbols": [
+      "SPY",
+      "QQQ",
+      "IWM",
+      "EFA",
+      "IEF"
+    ],
+    "period_start": "2018-01-02",
+    "period_end": "2023-10-02",
+    "total_return": 0.7226209882717082,
+    "cagr": 0.0992582010441414,
+    "sharpe_ratio": 1.1280428373122704,
+    "max_drawdown": 0.11160238471591882,
+    "n_trades": 64,
+    "commission_paid": 3787.2334430348446,
+    "slippage_paid": 0.0,
+    "benchmark_return": 0.08838279681649219,
+    "sortino_ratio": 1.6944773721145674,
+    "annual_volatility": 0.10316374536113362,
+    "annual_turnover": 3.1639999999999997,
+    "metadata": {
+      "vbt_stats": {
+        "Start": "2018-01-02 00:00:00",
+        "End": "2023-10-02 00:00:00",
+        "Period": "1500 days 00:00:00",
+        "Start Value": 100000.0,
+        "End Value": 172262.09882717082,
+        "Total Return [%]": 72.26209882717082,
+        "Benchmark Return [%]": 26.984047759114382,
+        "Max Gross Exposure [%]": 100.0,
+        "Total Fees Paid": 3787.2334430348446,
+        "Max Drawdown [%]": 11.160238471591882,
+        "Max Drawdown Duration": "240 days 00:00:00",
+        "Total Trades": 64,
+        "Total Closed Trades": 62,
+        "Total Open Trades": 2,
+        "Open Trade PnL": 6779.824582835572,
+        "Win Rate [%]": 72.58064516129032,
+        "Best Trade [%]": 34.745803209529264,
+        "Worst Trade [%]": -9.004404893404358,
+        "Avg Winning Trade [%]": 9.559886655130345,
+        "Avg Losing Trade [%]": -3.5124553127839944,
+        "Avg Winning Trade Duration": "102 days 05:20:00.000000001",
+        "Avg Losing Trade Duration": "54 days 22:35:17.647058823",
+        "Profit Factor": 3.5026364104894943,
+        "Expectancy": 1056.1657136183092,
+        "Sharpe Ratio": 1.1280428373122704,
+        "Calmar Ratio": 1.267821504583541,
+        "Omega Ratio": 1.1809345277639387,
+        "Sortino Ratio": 1.6944773721145674
+      }
+    }
+  },
+  "portfolio_weights": null,
+  "agent_analysis": "",
+  "artifact_paths": {
+    "report": "report.md"
+  },
+  "tags": [
+    "momentum",
+    "trend-filter",
+    "monthly",
+    "synthetic"
+  ],
+  "notes": "Outperforms SPY benchmark significantly on synthetic data. High turnover (~316%/yr) implies transaction costs are material — validate on real data before drawing conclusions. SMA-200 warm-up period (first ~200 bars) holds 100% cash."
+}

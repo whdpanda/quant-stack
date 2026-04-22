@@ -1,0 +1,66 @@
+[
+  {
+    "experiment_id": "2479210b-47f2-4d7a-ad4e-7848ed16e398",
+    "created_at": "2026-04-22T11:37:55",
+    "strategy_name": "trend_momentum_top2",
+    "description": "Dual-filter momentum strategy: SMA-200 trend eligibility + 63-day cross-sectional momentum ranking. Top-2 assets, monthly rebalancing.",
+    "tags": [
+      "momentum",
+      "trend-filter",
+      "monthly",
+      "synthetic"
+    ],
+    "symbols": [
+      "SPY",
+      "QQQ",
+      "IWM",
+      "EFA",
+      "IEF"
+    ],
+    "period_start": "2018-01-02",
+    "period_end": "2023-10-02",
+    "exp_dir": "20260422_113755_trend_momentum_top2_2479210b",
+    "metrics": {
+      "total_return": 0.722621,
+      "cagr": 0.099258,
+      "sharpe_ratio": 1.128043,
+      "sortino_ratio": 1.694477,
+      "max_drawdown": 0.111602,
+      "annual_volatility": 0.103164,
+      "annual_turnover": 3.164,
+      "benchmark_return": 0.088383
+    }
+  },
+  {
+    "experiment_id": "5d664f6c-1dfd-4b70-a143-98b4cfb77273",
+    "created_at": "2026-04-22T11:38:34",
+    "strategy_name": "trend_momentum_top2",
+    "description": "Dual-filter momentum strategy: SMA-200 trend eligibility + 63-day cross-sectional momentum ranking. Top-2 assets, monthly rebalancing.",
+    "tags": [
+      "momentum",
+      "trend-filter",
+      "monthly",
+      "synthetic"
+    ],
+    "symbols": [
+      "SPY",
+      "QQQ",
+      "IWM",
+      "EFA",
+      "IEF"
+    ],
+    "period_start": "2018-01-02",
+    "period_end": "2023-10-02",
+    "exp_dir": "20260422_113834_trend_momentum_top2_5d664f6c",
+    "metrics": {
+      "total_return": 0.722621,
+      "cagr": 0.099258,
+      "sharpe_ratio": 1.128043,
+      "sortino_ratio": 1.694477,
+      "max_drawdown": 0.111602,
+      "annual_volatility": 0.103164,
+      "annual_turnover": 3.164,
+      "benchmark_return": 0.088383
+    }
+  }
+]

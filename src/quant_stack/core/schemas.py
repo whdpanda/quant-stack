@@ -293,6 +293,9 @@ class ExperimentRecord(BaseModel):
     # Reproducibility snapshot — call AppConfig.model_dump() before running
     config_snapshot: dict[str, Any] = Field(default_factory=dict)
 
+    # Explicit strategy parameters (separate from the full config snapshot)
+    strategy_params: dict[str, Any] = Field(default_factory=dict)
+
     # Scope
     symbols: list[str] = Field(default_factory=list)
     period_start: date | None = None
@@ -302,6 +305,10 @@ class ExperimentRecord(BaseModel):
     backtest_result: BacktestResult | None = None
     portfolio_weights: PortfolioWeights | None = None
     agent_analysis: str = ""
+
+    # Paths to generated artifacts (relative to experiment directory)
+    # e.g. {"equity_curve": "artifacts/equity.png", "weights_csv": "artifacts/weights.csv"}
+    artifact_paths: dict[str, str] = Field(default_factory=dict)
 
     # Annotation
     tags: list[str] = Field(default_factory=list)
