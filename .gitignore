@@ -17,3 +17,5 @@ reports/*.json
 .venv/
 venv/
 *.ipynb_checkpoints/
+*.log
+reports/*.md
