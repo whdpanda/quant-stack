@@ -235,7 +235,7 @@ class PortfolioWeights(BaseModel):
     """
 
     weights: dict[str, float]
-    method: PortfolioMethod | None = None
+    method: str | None = None          # PortfolioMethod value OR allocator name
     rebalance_date: date | None = None
 
     # Expected metrics from the optimiser
@@ -256,7 +256,8 @@ class PortfolioWeights(BaseModel):
     @field_validator("weights")
     @classmethod
     def weights_non_negative(cls, v: dict[str, float]) -> dict[str, float]:
-        negative = {k: w for k, w in v.items() if w < 0}
+        # "CASH" is a reserved key for explicit cash buffer entries
+        negative = {k: w for k, w in v.items() if w < 0 and k != "CASH"}
         if negative:
             raise ValueError(
                 f"Long-only portfolio: negative weights found: {negative}. "
