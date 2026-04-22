@@ -216,6 +216,11 @@ class BacktestResult(BaseModel):
     # Benchmark comparison (optional; None = no benchmark used)
     benchmark_return: float | None = None
 
+    # Extended metrics (populated by vbt_adapter; None = not computed)
+    sortino_ratio: float | None = None
+    annual_volatility: float | None = None
+    annual_turnover: float | None = None
+
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @property
