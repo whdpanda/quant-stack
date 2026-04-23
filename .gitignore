@@ -20,3 +20,6 @@ venv/
 *.log
 reports/*.md
 experiments/records/*.json
+# generated experiment artifacts
+experiments/**/record.json
+experiments/**/report.md
