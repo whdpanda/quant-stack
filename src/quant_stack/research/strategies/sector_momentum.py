@@ -45,6 +45,22 @@ from quant_stack.factors.momentum import momentum
 from quant_stack.research.base import Strategy
 from quant_stack.signals.momentum import relative_momentum_ranking_signal
 
+# ── Canonical risk-on universe ────────────────────────────────────────────────
+# Single source of truth for all sector momentum experiments.
+# IEF is deliberately excluded: it is a defensive fallback asset, not a
+# risk-on ranking candidate.
+RISK_ON_UNIVERSE: list[str] = [
+    "VNQ",  # Real Estate
+    "QQQ",  # Technology / Nasdaq
+    "XLE",  # Energy
+    "XLV",  # Health Care
+    "XLF",  # Financials
+    "XLI",  # Industrials
+    "XLB",  # Materials
+    "SPY",  # Broad Market
+    "XLP",  # Consumer Staples
+]
+
 
 class SectorMomentumStrategy(Strategy):
     """Rank ETFs by rolling price momentum; hold the top N equal-weight.
