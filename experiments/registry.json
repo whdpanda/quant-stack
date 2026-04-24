@@ -1,16 +1,16 @@
 [
   {
-    "experiment_id": "dd44d6d2-5aa5-4cc3-8c86-edf2c780a37c",
-    "created_at": "2026-04-24T18:11:02",
+    "experiment_id": "3d1e8460-de85-4f75-83f3-57cfa98d6e54",
+    "created_at": "2026-04-24T20:03:13",
     "strategy_name": "sector_momentum_210d_top3",
-    "description": "Sector ETF rotation: top-3 by 210-day momentum, bi-monthly rebalancing (2ME), entry_margin hysteresis (≥2% ROC gap to displace). Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, VTV, SPY, XLP.",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, bi-monthly rebalancing (2ME), entry_margin hysteresis (≥2% ROC gap to displace), blend_70_30 weighting (70% equal + 30% inverse-vol, vol_window=63d). Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, VTV, SPY, XLP.",
     "tags": [
       "sector-rotation",
       "momentum",
       "etf",
       "bimonthly",
       "top3",
-      "equal-weight",
+      "blend-70-30",
       "entry-margin",
       "baseline"
     ],
@@ -27,30 +27,30 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260424_181102_sector_momentum_210d_top3_dd44d6d2",
+    "exp_dir": "20260424_200313_sector_momentum_210d_top3_3d1e8460",
     "metrics": {
-      "total_return": 5.545965,
-      "cagr": 0.124714,
-      "sharpe_ratio": 1.091212,
-      "sortino_ratio": 1.543399,
-      "max_drawdown": 0.221738,
-      "annual_volatility": 0.140783,
-      "annual_turnover": 1.555556,
-      "benchmark_return": 7.071746
+      "total_return": 5.362175,
+      "cagr": 0.122712,
+      "sharpe_ratio": 1.088515,
+      "sortino_ratio": 1.540545,
+      "max_drawdown": 0.217476,
+      "annual_volatility": 0.13886,
+      "annual_turnover": 1.630445,
+      "benchmark_return": 7.071743
     }
   },
   {
-    "experiment_id": "4e57aa1c-d96e-4dc0-a0ad-3778f15d7889",
-    "created_at": "2026-04-24T18:17:38",
+    "experiment_id": "0a4b57de-8451-426f-b396-13daaa28ba88",
+    "created_at": "2026-04-24T20:04:39",
     "strategy_name": "sector_momentum_210d_top3",
-    "description": "Sector ETF rotation: top-3 by 210-day momentum, bi-monthly rebalancing (2ME), entry_margin hysteresis (≥2% ROC gap to displace). Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, VTV, SPY, XLP.",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, bi-monthly rebalancing (2ME), entry_margin hysteresis (≥2% ROC gap to displace), blend_70_30 weighting (70% equal + 30% inverse-vol, vol_window=63d). Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, VTV, SPY, XLP.",
     "tags": [
       "sector-rotation",
       "momentum",
       "etf",
       "bimonthly",
       "top3",
-      "equal-weight",
+      "blend-70-30",
       "entry-margin",
       "baseline"
     ],
@@ -67,16 +67,16 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260424_181738_sector_momentum_210d_top3_4e57aa1c",
+    "exp_dir": "20260424_200439_sector_momentum_210d_top3_0a4b57de",
     "metrics": {
-      "total_return": 5.54597,
-      "cagr": 0.124714,
-      "sharpe_ratio": 1.091213,
-      "sortino_ratio": 1.543399,
-      "max_drawdown": 0.221738,
-      "annual_volatility": 0.140783,
-      "annual_turnover": 1.555556,
-      "benchmark_return": 7.07174
+      "total_return": 5.362167,
+      "cagr": 0.122712,
+      "sharpe_ratio": 1.088514,
+      "sortino_ratio": 1.540543,
+      "max_drawdown": 0.217477,
+      "annual_volatility": 0.13886,
+      "annual_turnover": 1.630446,
+      "benchmark_return": 7.071745
     }
   }
 ]

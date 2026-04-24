@@ -52,6 +52,8 @@ class WeightingScheme(StrEnum):
     EQUAL          = "equal"
     INVERSE_VOL    = "inverse_vol"
     MOMENTUM_SCORE = "momentum_score"
+    BLEND_50_50    = "blend_50_50"   # 50% equal + 50% inverse_vol
+    BLEND_70_30    = "blend_70_30"   # 70% equal + 30% inverse_vol
 
 
 class HysteresisMode(StrEnum):
@@ -295,3 +297,91 @@ def _apply_entry_margin(
         if mom_entrant - mom_worst > entry_margin:
             held.discard(worst_held)
             held.add(entrant)
+
+
+# ── Blended weighting helpers ─────────────────────────────────────────────────
+
+def _blend_strength(
+    signals: pd.DataFrame,
+    inv_vol_strength: pd.DataFrame,
+    alpha: float,
+) -> pd.DataFrame:
+    """Return pre-normalised blended weights (row sums ≈ 1 when invested).
+
+    alpha  : fraction allocated to equal weight (0 < alpha < 1).
+    1-alpha: fraction allocated to inverse-vol weight.
+
+    Pre-normalising here means signal_frame_to_weights divides by ~1.0,
+    leaving the blended weights effectively unchanged.
+
+    Robustness:
+    - Zero / near-zero volatility: clipped upstream to 1e-8 before this call.
+    - No selected assets in a row: row sum = 0 → NaN → propagated as 0.0
+      after the final .where mask; signal_frame_to_weights later treats that
+      row as explicit cash (all-zero post-warmup).
+    - Warmup rows (signals all-NaN): masked to 0.0; signal_frame_to_weights
+      restores them to NaN via warmup_mask.
+    """
+    # Equal weights: 1/n per selected asset
+    n_sel = (signals == 1.0).sum(axis=1).replace(0, float("nan"))
+    eq_w  = signals.where(signals == 1.0, other=0.0).div(n_sel, axis=0)
+
+    # Inverse-vol weights: row-normalise the raw inv-vol strengths
+    ivol_sum = inv_vol_strength.sum(axis=1).replace(0.0, float("nan"))
+    ivol_w   = inv_vol_strength.div(ivol_sum, axis=0)
+
+    blended = alpha * eq_w + (1.0 - alpha) * ivol_w
+    return blended.where(signals == 1.0, other=0.0)
+
+
+def compute_strength(
+    signals: pd.DataFrame,
+    close: pd.DataFrame,
+    scheme: WeightingScheme,
+    vol_window: int = 63,
+) -> pd.DataFrame:
+    """Compute per-asset strength from *pre-filtered* signals.
+
+    Unlike SectorMomentumStrategy.compute_weights(), this function accepts
+    signals that have already been processed (e.g. entry_margin hysteresis)
+    and only determines how to weight the selected assets — it does NOT
+    recompute signals from scratch.
+
+    Args:
+        signals   : 0/1/NaN DataFrame (e.g. output of apply_hysteresis).
+        close     : daily adjusted-close prices, same columns as signals.
+        scheme    : weighting method (WeightingScheme enum).
+        vol_window: rolling window for volatility; default 63 trading days
+                    (≈ 3 calendar months), consistent with compute_weights().
+
+    Returns:
+        Strength DataFrame to pass into SignalFrame → signal_frame_to_weights().
+        - EQUAL / INVERSE_VOL: raw unnormalised strengths (normalised later).
+        - BLEND_*: pre-normalised row-wise (signal_frame_to_weights divides
+          by ~1.0, leaving weights unchanged).
+
+    Volatility robustness:
+        Rolling std is clipped at 1e-8 to avoid division-by-zero.  vol_window
+        warmup (63 bars) is always covered by the strategy's own momentum
+        warmup (210 bars), so no NaN leaks into post-warmup strength values.
+    """
+    if scheme == WeightingScheme.EQUAL:
+        return signals.copy()
+
+    if scheme == WeightingScheme.INVERSE_VOL:
+        vol = close.pct_change().rolling(vol_window).std()
+        return (1.0 / vol.clip(lower=1e-8)).where(signals == 1.0, other=0.0)
+
+    if scheme == WeightingScheme.MOMENTUM_SCORE:
+        raise ValueError(
+            "MOMENTUM_SCORE requires raw momentum scores not available here; "
+            "use SectorMomentumStrategy.compute_weights(close, scheme) instead."
+        )
+
+    if scheme in (WeightingScheme.BLEND_50_50, WeightingScheme.BLEND_70_30):
+        alpha = 0.5 if scheme == WeightingScheme.BLEND_50_50 else 0.7
+        vol = close.pct_change().rolling(vol_window).std()
+        raw_inv_vol = (1.0 / vol.clip(lower=1e-8)).where(signals == 1.0, other=0.0)
+        return _blend_strength(signals, raw_inv_vol, alpha)
+
+    raise ValueError(f"Unknown WeightingScheme: {scheme!r}")

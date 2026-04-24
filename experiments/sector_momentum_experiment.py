@@ -1,11 +1,17 @@
-"""Sector ETF Momentum — Formal Strategy (entry_margin hysteresis).
+"""Sector ETF Momentum — Formal Strategy (blend_70_30 weighting).
 
 Strategy
 --------
 Universe  : 9 risk-on sector / style ETFs (see RISK_ON_UNIVERSE)
 Momentum  : 210-day price ROC (~10 calendar months)
 Selection : top-3 ETFs by cross-sectional momentum rank
-Weighting : equal weight
+Weighting : blend_70_30 — 70% equal + 30% inverse-volatility, renormalised.
+            Vol window = 63 trading days (≈3 calendar months).
+            Consolidated from weighting study (2026-04-24):
+              equal       Sharpe=1.091  CAGR=12.47%  MaxDD=22.17%
+              blend_70_30 Sharpe=1.089  CAGR=12.27%  MaxDD=21.75%  ← winner (best risk-adjusted)
+              blend_50_50 Sharpe=1.086  CAGR=12.12%  MaxDD=21.41%
+              inverse_vol Sharpe=1.073  CAGR=11.67%  MaxDD=20.57%
 Rebalance : bi-monthly (every 2 months, 2ME), executed next business day
 Hysteresis: entry_margin=0.02 — a new asset displaces the worst-ranked held asset
             only when its 210-day ROC exceeds the displaced asset's ROC by ≥ 2 pp.
@@ -36,7 +42,9 @@ from quant_stack.research.strategies.sector_momentum import (
     HysteresisMode,
     RISK_ON_UNIVERSE,
     SectorMomentumStrategy,
+    WeightingScheme,
     apply_hysteresis,
+    compute_strength,
 )
 from quant_stack.research.vbt_adapter import (
     VbtRunConfig,
@@ -59,12 +67,14 @@ STRATEGY_PARAMS = {
     "commission_bps":   10,
     "hysteresis_mode":  "entry_margin",
     "entry_margin":     0.02,          # new asset must beat displaced by ≥ 2pp ROC
+    "weighting_scheme": "blend_70_30", # 70% equal + 30% inverse_vol, vol_window=63d
+    "vol_window":       63,
 }
 
 # ── 1. Fetch data ──────────────────────────────────────────────────────────────
 
 print("=" * 60)
-print("  Sector ETF Momentum — Formal Strategy (entry_margin)")
+print("  Sector ETF Momentum — Formal Strategy (blend_70_30)")
 print("=" * 60)
 
 all_syms = list(dict.fromkeys(RISK_ON_UNIVERSE + [BENCHMARK]))
@@ -88,20 +98,25 @@ print(f"\n[DATA]  {close.shape[0]:,} trading days  "
       f"{close.index[0].date()} to {close.index[-1].date()}")
 print(f"        Universe: {', '.join(RISK_ON_UNIVERSE)}")
 
-# ── 2. Signals → hysteresis → weights ────────────────────────────────────────
+# ── 2. Signals → hysteresis → blend_70_30 weights ────────────────────────────
 
 strategy = SectorMomentumStrategy(
     momentum_window=STRATEGY_PARAMS["momentum_window"],
     top_n=STRATEGY_PARAMS["top_n"],
 )
 raw_signals, ranks, mom_scores = strategy.generate_signals_full(close)
-signals = apply_hysteresis(
+signals  = apply_hysteresis(
     raw_signals, ranks, mom_scores,
     mode=HysteresisMode.ENTRY_MARGIN,
     top_n=STRATEGY_PARAMS["top_n"],
     entry_margin=STRATEGY_PARAMS["entry_margin"],
 )
-sf      = SignalFrame(signals=signals, strength=signals.copy(),
+strength = compute_strength(
+    signals, close,
+    scheme=WeightingScheme.BLEND_70_30,
+    vol_window=STRATEGY_PARAMS["vol_window"],
+)
+sf      = SignalFrame(signals=signals, strength=strength,
                       strategy_name=strategy.name)
 weights = signal_frame_to_weights(sf)
 
@@ -149,8 +164,8 @@ print(f"\n[LAST REBALANCE]  {last_date.date()}: {', '.join(top_etfs)}")
 # ── 6. Save ExperimentRecord ──────────────────────────────────────────────────
 
 pw = PortfolioWeights(
-    weights={sym: 1.0 / STRATEGY_PARAMS["top_n"] for sym in top_etfs},
-    method="equal_weight",
+    weights={sym: round(1.0 / STRATEGY_PARAMS["top_n"], 4) for sym in top_etfs},
+    method="blend_70_30",
     rebalance_date=last_date.date(),
 )
 bm_str = f"{result.benchmark_return:.2%}" if result.benchmark_return is not None else "N/A"
@@ -162,7 +177,8 @@ record = ExperimentRecord(
     description=(
         f"Sector ETF rotation: top-{STRATEGY_PARAMS['top_n']} by "
         f"{STRATEGY_PARAMS['momentum_window']}-day momentum, bi-monthly rebalancing (2ME), "
-        f"entry_margin hysteresis (≥{STRATEGY_PARAMS['entry_margin']:.0%} ROC gap to displace). "
+        f"entry_margin hysteresis (≥{STRATEGY_PARAMS['entry_margin']:.0%} ROC gap to displace), "
+        f"blend_70_30 weighting (70% equal + 30% inverse-vol, vol_window={STRATEGY_PARAMS['vol_window']}d). "
         f"Universe: {', '.join(RISK_ON_UNIVERSE)}."
     ),
     strategy_params=STRATEGY_PARAMS,
@@ -172,7 +188,7 @@ record = ExperimentRecord(
     backtest_result=result,
     portfolio_weights=pw,
     tags=["sector-rotation", "momentum", "etf", "bimonthly",
-          f"top{STRATEGY_PARAMS['top_n']}", "equal-weight", "entry-margin", "baseline"],
+          f"top{STRATEGY_PARAMS['top_n']}", "blend-70-30", "entry-margin", "baseline"],
     notes=f"Benchmark SPY: {bm_str}.{ex_str}",
 )
 
