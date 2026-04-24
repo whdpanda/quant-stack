@@ -7,11 +7,11 @@ Momentum  : price ROC over *momentum_window* trading days
             Default 252 ≈ 12 calendar months
 Ranking   : cross-sectional; top *top_n* ETFs receive signal = 1.0
 Holding   : equal-weight (strength uniform across longs)
-Rebalance : monthly — enforced by the backtest adapter, NOT here
-            (set VbtRunConfig.rebalance_freq = "ME" in the caller)
+Rebalance : bi-monthly (every 2 months) — enforced by the backtest adapter, NOT here
+            (set VbtRunConfig.rebalance_freq = "2ME" in the caller)
 
 Usage with vbt_adapter (recommended — includes look-ahead prevention
-and monthly rebalancing):
+and bi-monthly rebalancing):
 
     from quant_stack.research.strategies.sector_momentum import SectorMomentumStrategy
     from quant_stack.research.vbt_adapter import (
@@ -26,7 +26,7 @@ and monthly rebalancing):
     weights  = signal_frame_to_weights(sf)
     result   = run_vbt_backtest(
                    close, weights,
-                   config=VbtRunConfig(rebalance_freq="ME"),
+                   config=VbtRunConfig(rebalance_freq="2ME"),
                    benchmark_close=close["SPY"],
                    strategy_name=strategy.name,
                )
@@ -39,11 +39,19 @@ Usage with run_backtest (daily rebalancing — higher turnover):
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 import pandas as pd
 
 from quant_stack.factors.momentum import momentum
 from quant_stack.research.base import Strategy
 from quant_stack.signals.momentum import relative_momentum_ranking_signal
+
+
+class WeightingScheme(StrEnum):
+    EQUAL          = "equal"
+    INVERSE_VOL    = "inverse_vol"
+    MOMENTUM_SCORE = "momentum_score"
 
 # ── Canonical risk-on universe ────────────────────────────────────────────────
 # Single source of truth for all sector momentum experiments.
@@ -81,6 +89,52 @@ class SectorMomentumStrategy(Strategy):
         self.momentum_window = momentum_window
         self.top_n = top_n
         self.name = f"sector_momentum_{momentum_window}d_top{top_n}"
+
+    def compute_weights(
+        self,
+        close: pd.DataFrame,
+        scheme: WeightingScheme = WeightingScheme.EQUAL,
+        vol_window: int = 63,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Return (signals, strength) under the requested weighting scheme.
+
+        signals  : 0/1/NaN daily DataFrame (identical to generate_signals output)
+        strength : scheme-specific raw values; pass to signal_frame_to_weights()
+                   for normalisation.
+
+        Schemes
+        -------
+        equal          : strength = 1.0 for every selected asset → equal weight
+        inverse_vol    : strength = 1 / rolling_std(returns, vol_window);
+                         near-zero vol is clipped at 1e-8 to avoid division errors
+        momentum_score : strength = raw ROC shifted to non-negative via row-wise
+                         min-shift + ε.  Rationale: ROC can be negative in bear
+                         markets; shifting preserves relative ordering while
+                         ensuring all weights are positive after normalisation.
+        """
+        mom = momentum(close, self.momentum_window)
+        sf_base = relative_momentum_ranking_signal(
+            mom, top_n=self.top_n, strategy_name=self.name
+        )
+        signals = sf_base.signals  # 0/1/NaN
+
+        if scheme == WeightingScheme.EQUAL:
+            strength = signals.copy()
+
+        elif scheme == WeightingScheme.INVERSE_VOL:
+            vol = close.pct_change().rolling(vol_window).std()
+            strength = (1.0 / vol.clip(lower=1e-8)).where(signals == 1.0, other=0.0)
+
+        elif scheme == WeightingScheme.MOMENTUM_SCORE:
+            raw = mom.where(signals == 1.0)           # NaN for non-selected
+            row_min = raw.min(axis=1)
+            shifted = raw.sub(row_min, axis=0) + 1e-6  # all selected ≥ ε > 0
+            strength = shifted.where(signals == 1.0, other=0.0)
+
+        else:
+            raise ValueError(f"Unknown weighting scheme: {scheme!r}")
+
+        return signals, strength
 
     def generate_signals(self, close: pd.DataFrame) -> pd.DataFrame:
         """Compute cross-sectional momentum signals for every trading day.

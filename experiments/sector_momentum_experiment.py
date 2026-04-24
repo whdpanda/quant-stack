@@ -6,7 +6,7 @@ Universe  : 9 risk-on sector / style ETFs (see RISK_ON_UNIVERSE)
 Momentum  : 210-day price ROC (~10 calendar months)
 Selection : top-3 ETFs by cross-sectional momentum rank
 Weighting : equal weight
-Rebalance : monthly (month-end), executed next business day
+Rebalance : bi-monthly (every 2 months, 2ME), executed next business day
 Benchmark : SPY buy-and-hold
 
 Run
@@ -48,7 +48,7 @@ PERIOD_END   = date(2025, 12, 31)
 STRATEGY_PARAMS = {
     "momentum_window": 210,
     "top_n":           3,
-    "rebalance_freq":  "ME",
+    "rebalance_freq":  "2ME",
     "commission_bps":  10,
 }
 
@@ -146,7 +146,7 @@ ex_str = (
 record = ExperimentRecord(
     description=(
         f"Sector ETF rotation: top-{STRATEGY_PARAMS['top_n']} by "
-        f"{STRATEGY_PARAMS['momentum_window']}-day momentum, monthly rebalancing. "
+        f"{STRATEGY_PARAMS['momentum_window']}-day momentum, bi-monthly rebalancing (2ME). "
         f"Universe: {', '.join(RISK_ON_UNIVERSE)}."
     ),
     strategy_params=STRATEGY_PARAMS,
@@ -155,7 +155,7 @@ record = ExperimentRecord(
     period_end=result.period_end,
     backtest_result=result,
     portfolio_weights=pw,
-    tags=["sector-rotation", "momentum", "etf", "monthly",
+    tags=["sector-rotation", "momentum", "etf", "bimonthly",
           f"top{STRATEGY_PARAMS['top_n']}", "equal-weight", "baseline"],
     notes=f"Benchmark SPY: {bm_str}.{ex_str}",
 )
