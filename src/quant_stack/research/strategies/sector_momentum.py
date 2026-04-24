@@ -53,6 +53,13 @@ class WeightingScheme(StrEnum):
     INVERSE_VOL    = "inverse_vol"
     MOMENTUM_SCORE = "momentum_score"
 
+
+class HysteresisMode(StrEnum):
+    NONE             = "no_hysteresis"
+    EXIT_BUFFER_TOP4 = "exit_buffer_top4"
+    EXIT_BUFFER_TOP5 = "exit_buffer_top5"
+    ENTRY_MARGIN     = "entry_margin"
+
 # ── Canonical risk-on universe ────────────────────────────────────────────────
 # Single source of truth for all sector momentum experiments.
 # IEF is deliberately excluded: it is a defensive fallback asset, not a
@@ -136,6 +143,24 @@ class SectorMomentumStrategy(Strategy):
 
         return signals, strength
 
+    def generate_signals_full(
+        self, close: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Return (signals, ranks, momentum_scores) for advanced overlays.
+
+        signals          : 0/1/NaN daily DataFrame
+        ranks            : cross-sectional rank each day (1 = best); NaN during warmup
+        momentum_scores  : raw price ROC values; NaN during warmup
+        """
+        mom = momentum(close, self.momentum_window)
+        sf = relative_momentum_ranking_signal(
+            mom, top_n=self.top_n, strategy_name=self.name
+        )
+        # ranks: ascending rank (1 = highest momentum)
+        ranks = mom.rank(axis=1, ascending=False, method="min")
+        ranks[mom.isna().all(axis=1)] = float("nan")
+        return sf.signals, ranks, mom
+
     def generate_signals(self, close: pd.DataFrame) -> pd.DataFrame:
         """Compute cross-sectional momentum signals for every trading day.
 
@@ -154,3 +179,119 @@ class SectorMomentumStrategy(Strategy):
             strategy_name=self.name,
         )
         return sf.signals
+
+
+# ── Hysteresis / turnover-buffer overlay ─────────────────────────────────────
+
+def apply_hysteresis(
+    signals: pd.DataFrame,
+    ranks: pd.DataFrame,
+    momentum_scores: pd.DataFrame,
+    mode: HysteresisMode,
+    top_n: int = 3,
+    exit_buffer: int = 4,
+    entry_margin: float = 0.02,
+) -> pd.DataFrame:
+    """Apply a stateful hysteresis rule on top of raw signals.
+
+    Iterates day by day maintaining a *held* set.  NaN (warmup) rows pass
+    through unchanged.  On non-warmup rows the rule is applied and a new
+    0/1 signal DataFrame is returned.
+
+    Modes
+    -----
+    NONE          : return signals unchanged (baseline)
+    EXIT_BUFFER_TOP4/5 :
+        A held asset is only evicted when its rank > exit_buffer.
+        Any vacancy (held < top_n) is filled by the highest-ranked
+        asset not already held, as long as its rank <= top_n.
+    ENTRY_MARGIN  :
+        A new asset (rank <= top_n, not held) displaces the lowest-ranked
+        held asset only if its momentum ROC exceeds that asset's ROC by
+        at least *entry_margin* (absolute, e.g. 0.02 = 2 pp).
+    """
+    if mode == HysteresisMode.NONE:
+        return signals.copy()
+
+    cols = signals.columns
+    n_rows = len(signals)
+    out = signals.copy().astype(float)
+
+    held: set[str] = set()
+
+    for i in range(n_rows):
+        row_sig = signals.iloc[i]
+
+        # Warmup rows: all-NaN → pass through, held stays empty
+        if row_sig.isna().all():
+            held = set()
+            continue
+
+        row_rank = ranks.iloc[i]
+        row_mom  = momentum_scores.iloc[i]
+
+        if mode in (HysteresisMode.EXIT_BUFFER_TOP4, HysteresisMode.EXIT_BUFFER_TOP5):
+            _apply_exit_buffer(held, row_rank, top_n, exit_buffer)
+        elif mode == HysteresisMode.ENTRY_MARGIN:
+            _apply_entry_margin(held, row_rank, row_mom, top_n, entry_margin)
+
+        # Write new signals for this row
+        new_row = pd.Series(0.0, index=cols)
+        for sym in held:
+            new_row[sym] = 1.0
+        out.iloc[i] = new_row
+
+    return out
+
+
+def _apply_exit_buffer(
+    held: set[str],
+    row_rank: pd.Series,
+    top_n: int,
+    exit_buffer: int,
+) -> None:
+    """Mutate *held* in-place: evict only when rank > exit_buffer, fill vacancies."""
+    # Evict held assets whose rank has fallen beyond the buffer
+    to_evict = {sym for sym in held if row_rank.get(sym, float("inf")) > exit_buffer}
+    held -= to_evict
+
+    # Fill vacancies with best-ranked assets not already held (rank <= top_n)
+    candidates = sorted(
+        [sym for sym in row_rank.index if sym not in held and row_rank[sym] <= top_n],
+        key=lambda s: row_rank[s],
+    )
+    while len(held) < top_n and candidates:
+        held.add(candidates.pop(0))
+
+
+def _apply_entry_margin(
+    held: set[str],
+    row_rank: pd.Series,
+    row_mom: pd.Series,
+    top_n: int,
+    entry_margin: float,
+) -> None:
+    """Mutate *held* in-place: replace with margin rule, evict hard drops."""
+    # Hard eviction: held asset is no longer in the raw top_n signal universe
+    # (rank > top_n * 2 acts as a hard floor to avoid holding perpetual losers)
+    hard_floor = top_n * 2
+    to_evict = {sym for sym in held if row_rank.get(sym, float("inf")) > hard_floor}
+    held -= to_evict
+
+    # Identify new entrants: top_n ranked, not currently held
+    entrants = sorted(
+        [sym for sym in row_rank.index if sym not in held and row_rank[sym] <= top_n],
+        key=lambda s: row_rank[s],
+    )
+
+    for entrant in entrants:
+        if len(held) < top_n:
+            held.add(entrant)
+            continue
+        # Find lowest-momentum held asset
+        worst_held = min(held, key=lambda s: row_mom.get(s, float("-inf")))
+        mom_entrant = row_mom.get(entrant, float("-inf"))
+        mom_worst   = row_mom.get(worst_held, float("-inf"))
+        if mom_entrant - mom_worst > entry_margin:
+            held.discard(worst_held)
+            held.add(entrant)

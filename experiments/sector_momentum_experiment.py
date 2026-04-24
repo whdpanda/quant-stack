@@ -1,4 +1,4 @@
-"""Sector ETF Momentum — Baseline Research Experiment.
+"""Sector ETF Momentum — Formal Strategy (entry_margin hysteresis).
 
 Strategy
 --------
@@ -7,6 +7,11 @@ Momentum  : 210-day price ROC (~10 calendar months)
 Selection : top-3 ETFs by cross-sectional momentum rank
 Weighting : equal weight
 Rebalance : bi-monthly (every 2 months, 2ME), executed next business day
+Hysteresis: entry_margin=0.02 — a new asset displaces the worst-ranked held asset
+            only when its 210-day ROC exceeds the displaced asset's ROC by ≥ 2 pp.
+            Consolidated from hysteresis study (2026-04-24):
+              entry_margin  Sharpe=1.091  CAGR=12.47%  MaxDD=22.17%  ← winner
+              no_hysteresis Sharpe=1.048  CAGR=12.11%  MaxDD=22.17%
 Benchmark : SPY buy-and-hold
 
 Run
@@ -28,8 +33,10 @@ from loguru import logger
 from quant_stack.core.schemas import DataConfig, ExperimentRecord, PortfolioWeights
 from quant_stack.data.providers.yahoo import YahooProvider
 from quant_stack.research.strategies.sector_momentum import (
+    HysteresisMode,
     RISK_ON_UNIVERSE,
     SectorMomentumStrategy,
+    apply_hysteresis,
 )
 from quant_stack.research.vbt_adapter import (
     VbtRunConfig,
@@ -46,16 +53,18 @@ PERIOD_START = date(2010, 1, 1)
 PERIOD_END   = date(2025, 12, 31)
 
 STRATEGY_PARAMS = {
-    "momentum_window": 210,
-    "top_n":           3,
-    "rebalance_freq":  "2ME",
-    "commission_bps":  10,
+    "momentum_window":  210,
+    "top_n":            3,
+    "rebalance_freq":   "2ME",
+    "commission_bps":   10,
+    "hysteresis_mode":  "entry_margin",
+    "entry_margin":     0.02,          # new asset must beat displaced by ≥ 2pp ROC
 }
 
 # ── 1. Fetch data ──────────────────────────────────────────────────────────────
 
 print("=" * 60)
-print("  Sector ETF Momentum — Baseline")
+print("  Sector ETF Momentum — Formal Strategy (entry_margin)")
 print("=" * 60)
 
 all_syms = list(dict.fromkeys(RISK_ON_UNIVERSE + [BENCHMARK]))
@@ -79,13 +88,19 @@ print(f"\n[DATA]  {close.shape[0]:,} trading days  "
       f"{close.index[0].date()} to {close.index[-1].date()}")
 print(f"        Universe: {', '.join(RISK_ON_UNIVERSE)}")
 
-# ── 2. Signals → weights ──────────────────────────────────────────────────────
+# ── 2. Signals → hysteresis → weights ────────────────────────────────────────
 
 strategy = SectorMomentumStrategy(
     momentum_window=STRATEGY_PARAMS["momentum_window"],
     top_n=STRATEGY_PARAMS["top_n"],
 )
-signals = strategy.generate_signals(close)
+raw_signals, ranks, mom_scores = strategy.generate_signals_full(close)
+signals = apply_hysteresis(
+    raw_signals, ranks, mom_scores,
+    mode=HysteresisMode.ENTRY_MARGIN,
+    top_n=STRATEGY_PARAMS["top_n"],
+    entry_margin=STRATEGY_PARAMS["entry_margin"],
+)
 sf      = SignalFrame(signals=signals, strength=signals.copy(),
                       strategy_name=strategy.name)
 weights = signal_frame_to_weights(sf)
@@ -146,7 +161,8 @@ ex_str = (
 record = ExperimentRecord(
     description=(
         f"Sector ETF rotation: top-{STRATEGY_PARAMS['top_n']} by "
-        f"{STRATEGY_PARAMS['momentum_window']}-day momentum, bi-monthly rebalancing (2ME). "
+        f"{STRATEGY_PARAMS['momentum_window']}-day momentum, bi-monthly rebalancing (2ME), "
+        f"entry_margin hysteresis (≥{STRATEGY_PARAMS['entry_margin']:.0%} ROC gap to displace). "
         f"Universe: {', '.join(RISK_ON_UNIVERSE)}."
     ),
     strategy_params=STRATEGY_PARAMS,
@@ -156,7 +172,7 @@ record = ExperimentRecord(
     backtest_result=result,
     portfolio_weights=pw,
     tags=["sector-rotation", "momentum", "etf", "bimonthly",
-          f"top{STRATEGY_PARAMS['top_n']}", "equal-weight", "baseline"],
+          f"top{STRATEGY_PARAMS['top_n']}", "equal-weight", "entry-margin", "baseline"],
     notes=f"Benchmark SPY: {bm_str}.{ex_str}",
 )
 
