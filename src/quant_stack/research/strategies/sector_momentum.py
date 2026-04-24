@@ -64,7 +64,7 @@ RISK_ON_UNIVERSE: list[str] = [
     "XLV",  # Health Care
     "XLF",  # Financials
     "XLI",  # Industrials
-    "XLB",  # Materials
+    "VTV",  # Vanguard Value ETF
     "SPY",  # Broad Market
     "XLP",  # Consumer Staples
 ]
