@@ -282,11 +282,63 @@ def _build_result(
 
 
 def _safe(v: object) -> object:
-    """Convert non-JSON-serialisable stats values."""
-    if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
+    """Recursively convert vbt stat values to JSON-serialisable Python types."""
+    import math
+
+    if v is None:
         return None
-    if hasattr(v, "item"):
-        return v.item()  # numpy scalar
-    if isinstance(v, (pd.Timestamp, pd.Timedelta)):
+
+    # pandas NaT / NA sentinels (must come before Timestamp/Timedelta checks)
+    try:
+        if v is pd.NaT or v is pd.NA:
+            return None
+    except AttributeError:
+        pass
+
+    # numpy / pandas scalar with .item() — covers int64, float64, bool_, etc.
+    # Guard: str/bytes also have .item() in some environments, skip them.
+    if hasattr(v, "item") and not isinstance(v, (str, bytes, bool)):
+        try:
+            inner = v.item()
+            return _safe(inner)          # recurse; item() may still be numpy
+        except (ValueError, TypeError):
+            pass
+
+    # float: replace nan/inf with None so JSON doesn't choke
+    if isinstance(v, float):
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
+
+    # bool before int — bool is a subclass of int in Python
+    if isinstance(v, bool):
+        return v
+
+    if isinstance(v, int):
+        return v
+
+    if isinstance(v, str):
+        return v
+
+    # pandas Timestamp / datetime-like with isoformat()
+    if hasattr(v, "isoformat"):
+        try:
+            return v.isoformat()
+        except Exception:
+            return str(v)
+
+    # pandas Timedelta
+    if isinstance(v, pd.Timedelta):
         return str(v)
-    return v
+
+    # dict / list: recurse
+    if isinstance(v, dict):
+        return {str(k): _safe(vv) for k, vv in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_safe(vv) for vv in v]
+
+    # Fallback: stringify anything else
+    try:
+        return str(v)
+    except Exception:
+        return None

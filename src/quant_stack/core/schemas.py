@@ -14,6 +14,7 @@ Two categories live here:
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from datetime import date, datetime
 from enum import StrEnum
@@ -271,6 +272,84 @@ class PortfolioWeights(BaseModel):
         return v
 
 
+# ── JSON serialisation helpers ─────────────────────────────────────────────────
+
+def _sanitize(obj: Any) -> Any:
+    """Recursively convert any value to a JSON-serialisable Python type.
+
+    Handles numpy scalars, pandas Timestamps/Timedeltas/NaT, nan/inf floats,
+    and date/datetime objects so that model_dump() output can always be passed
+    to json.dumps() without errors.
+    """
+    if obj is None:
+        return None
+
+    # --- dict / list / tuple ------------------------------------------------
+    if isinstance(obj, dict):
+        return {str(k): _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(v) for v in obj]
+
+    # --- bool before int (bool is a subclass of int) ------------------------
+    if isinstance(obj, bool):
+        return obj
+
+    # --- plain Python scalars -----------------------------------------------
+    if isinstance(obj, int):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, str):
+        return obj
+
+    # --- date / datetime (pydantic model_dump returns these as objects) ------
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
+
+    # --- numpy / pandas scalars with .item() --------------------------------
+    # Covers numpy int64/float64/bool_ and any other array-scalar types.
+    # Exclude str/bytes which also have .item() in rare environments.
+    if hasattr(obj, "item") and not isinstance(obj, (str, bytes)):
+        try:
+            inner = obj.item()
+            return _sanitize(inner)
+        except (ValueError, TypeError):
+            pass
+
+    # --- pandas NaT / NA sentinels ------------------------------------------
+    # Import lazily so schemas.py has no hard dependency on pandas.
+    try:
+        import pandas as _pd  # noqa: PLC0415
+        if obj is _pd.NaT or obj is _pd.NA:
+            return None
+        if isinstance(obj, _pd.Timedelta):
+            return str(obj)
+        if hasattr(obj, "isoformat"):   # pd.Timestamp (also catches datetime above)
+            try:
+                return obj.isoformat()
+            except Exception:
+                return str(obj)
+    except ImportError:
+        pass
+
+    # --- generic isoformat (any datetime-like) ------------------------------
+    if hasattr(obj, "isoformat"):
+        try:
+            return obj.isoformat()
+        except Exception:
+            pass
+
+    # --- last resort --------------------------------------------------------
+    try:
+        return str(obj)
+    except Exception:
+        return None
+
+
 # ── Experiment record ──────────────────────────────────────────────────────────
 
 class ExperimentRecord(BaseModel):
@@ -320,7 +399,13 @@ class ExperimentRecord(BaseModel):
         """Serialise to JSON. Returns the path written."""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+        try:
+            text = self.model_dump_json(indent=2)
+        except Exception:
+            # Fallback: dump to Python dict first, then sanitize and encode.
+            raw = self.model_dump(mode="python")
+            text = json.dumps(_sanitize(raw), indent=2, ensure_ascii=False)
+        p.write_text(text, encoding="utf-8")
         return p
 
     @classmethod

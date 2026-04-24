@@ -2,20 +2,24 @@
 
 Strategy
 --------
-Universe  : 9 risk-on sector / style ETFs (see RISK_ON_UNIVERSE)
+Universe  : VNQ QQQ XLE XLV XLF XLI VTV GDX XLP  (9 risk-on ETFs, from RISK_ON_UNIVERSE)
+            GDX consolidated 2026-04-25: replaces SPY after exhaustive universe study
+            (18 candidates tested; GDX beat SPY on Sharpe/CAGR/MaxDD simultaneously)
 Momentum  : 210-day price ROC (~10 calendar months)
 Selection : top-3 ETFs by cross-sectional momentum rank
 Weighting : blend_70_30 — 70% equal + 30% inverse-volatility, renormalised.
             Vol window = 63 trading days (≈3 calendar months).
-            Consolidated from weighting study (2026-04-24):
+            Scheme consolidated from weighting study (2026-04-24, SPY-era universe):
               equal       Sharpe=1.091  CAGR=12.47%  MaxDD=22.17%
               blend_70_30 Sharpe=1.089  CAGR=12.27%  MaxDD=21.75%  ← winner (best risk-adjusted)
               blend_50_50 Sharpe=1.086  CAGR=12.12%  MaxDD=21.41%
               inverse_vol Sharpe=1.073  CAGR=11.67%  MaxDD=20.57%
+            GDX-universe baseline (2010-2025, 2026-04-25):
+              blend_70_30 Sharpe=1.096  CAGR=13.14%  MaxDD=21.53%
 Rebalance : bi-monthly (every 2 months, 2ME), executed next business day
 Hysteresis: entry_margin=0.02 — a new asset displaces the worst-ranked held asset
             only when its 210-day ROC exceeds the displaced asset's ROC by ≥ 2 pp.
-            Consolidated from hysteresis study (2026-04-24):
+            Mode consolidated from hysteresis study (2026-04-24, SPY-era universe):
               entry_margin  Sharpe=1.091  CAGR=12.47%  MaxDD=22.17%  ← winner
               no_hysteresis Sharpe=1.048  CAGR=12.11%  MaxDD=22.17%
 Benchmark : SPY buy-and-hold
@@ -56,7 +60,7 @@ from quant_stack.tracking import ExperimentTracker
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-BENCHMARK    = "SPY"
+BENCHMARK    = "SPY"   # buy-and-hold benchmark; GDX is now a ranking candidate, not the benchmark
 PERIOD_START = date(2010, 1, 1)
 PERIOD_END   = date(2025, 12, 31)
 
