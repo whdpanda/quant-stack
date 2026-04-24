@@ -66,8 +66,8 @@
   {
     "experiment_id": "a6f7b78c-207e-4494-a587-d09cfe7a3b8b",
     "created_at": "2026-04-23T21:39:15",
-    "strategy_name": "sector_momentum_252d_top3",
-    "description": "Sector ETF rotation: top-3 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -90,7 +90,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2024-12-30",
-    "exp_dir": "20260423_213915_sector_momentum_252d_top3_a6f7b78c",
+    "exp_dir": "20260423_213915_sector_momentum_210d_top3_a6f7b78c",
     "metrics": {
       "total_return": 2.863533,
       "cagr": 0.094375,
@@ -105,8 +105,8 @@
   {
     "experiment_id": "c4ed1c50-f7cb-48ec-b115-eb88175e2a33",
     "created_at": "2026-04-23T21:44:36",
-    "strategy_name": "sector_momentum_252d_top3",
-    "description": "Sector ETF rotation: top-3 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -129,7 +129,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2024-12-30",
-    "exp_dir": "20260423_214436_sector_momentum_252d_top3_c4ed1c50",
+    "exp_dir": "20260423_214436_sector_momentum_210d_top3_c4ed1c50",
     "metrics": {
       "total_return": 2.863529,
       "cagr": 0.094375,
@@ -261,8 +261,8 @@
   {
     "experiment_id": "1dcb722c-cd7c-458a-8b8a-d0e6607c26d5",
     "created_at": "2026-04-23T23:13:52",
-    "strategy_name": "sector_momentum_252d_top4",
-    "description": "Sector ETF rotation: top-4 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top4",
+    "description": "Sector ETF rotation: top-4 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -285,7 +285,7 @@
     ],
     "period_start": "2020-01-02",
     "period_end": "2025-12-30",
-    "exp_dir": "20260423_231352_sector_momentum_252d_top4_1dcb722c",
+    "exp_dir": "20260423_231352_sector_momentum_210d_top4_1dcb722c",
     "metrics": {
       "total_return": 0.645863,
       "cagr": 0.086693,
@@ -300,8 +300,8 @@
   {
     "experiment_id": "cf03eac0-e68f-4abd-aaba-b5523d8f8a33",
     "created_at": "2026-04-23T23:14:29",
-    "strategy_name": "sector_momentum_252d_top3",
-    "description": "Sector ETF rotation: top-3 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -324,7 +324,7 @@
     ],
     "period_start": "2020-01-02",
     "period_end": "2025-12-30",
-    "exp_dir": "20260423_231429_sector_momentum_252d_top3_cf03eac0",
+    "exp_dir": "20260423_231429_sector_momentum_210d_top3_cf03eac0",
     "metrics": {
       "total_return": 0.842696,
       "cagr": 0.10737,
@@ -339,8 +339,8 @@
   {
     "experiment_id": "0d153d4e-bf92-4ff5-bdfa-9488f23ce0e1",
     "created_at": "2026-04-23T23:15:13",
-    "strategy_name": "sector_momentum_252d_top2",
-    "description": "Sector ETF rotation: top-2 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top2",
+    "description": "Sector ETF rotation: top-2 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -363,7 +363,7 @@
     ],
     "period_start": "2020-01-02",
     "period_end": "2025-12-30",
-    "exp_dir": "20260423_231513_sector_momentum_252d_top2_0d153d4e",
+    "exp_dir": "20260423_231513_sector_momentum_210d_top2_0d153d4e",
     "metrics": {
       "total_return": 0.660399,
       "cagr": 0.088288,
@@ -378,8 +378,8 @@
   {
     "experiment_id": "7d72793d-e71d-40f0-abde-4989d01dd4bd",
     "created_at": "2026-04-23T23:27:13",
-    "strategy_name": "sector_momentum_252d_top3",
-    "description": "Sector ETF rotation: top-3 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -402,7 +402,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260423_232713_sector_momentum_252d_top3_7d72793d",
+    "exp_dir": "20260423_232713_sector_momentum_210d_top3_7d72793d",
     "metrics": {
       "total_return": 3.144354,
       "cagr": 0.09301,
@@ -534,8 +534,8 @@
   {
     "experiment_id": "6b27633e-e1c7-415d-a1b5-425c1307bfb9",
     "created_at": "2026-04-23T23:33:35",
-    "strategy_name": "sector_momentum_252d_top2",
-    "description": "Sector ETF rotation: top-2 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top2",
+    "description": "Sector ETF rotation: top-2 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -558,7 +558,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260423_233335_sector_momentum_252d_top2_6b27633e",
+    "exp_dir": "20260423_233335_sector_momentum_210d_top2_6b27633e",
     "metrics": {
       "total_return": 1.509187,
       "cagr": 0.059235,
@@ -573,8 +573,8 @@
   {
     "experiment_id": "d4a0f91f-6fff-480e-aab9-5ded3cc1f661",
     "created_at": "2026-04-23T23:34:29",
-    "strategy_name": "sector_momentum_252d_top3",
-    "description": "Sector ETF rotation: top-3 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -597,7 +597,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260423_233429_sector_momentum_252d_top3_d4a0f91f",
+    "exp_dir": "20260423_233429_sector_momentum_210d_top3_d4a0f91f",
     "metrics": {
       "total_return": 3.144347,
       "cagr": 0.09301,
@@ -612,8 +612,8 @@
   {
     "experiment_id": "0b22853c-7583-490f-aa48-f94e1557bf6a",
     "created_at": "2026-04-23T23:35:14",
-    "strategy_name": "sector_momentum_252d_top4",
-    "description": "Sector ETF rotation: top-4 by 252-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
+    "strategy_name": "sector_momentum_210d_top4",
+    "description": "Sector ETF rotation: top-4 by 210-day momentum, monthly rebalancing. Universe: VNQ, XLK, XLE, XLV, XLF, XLI, XLB, XLY, XLP, XLU.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -636,7 +636,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260423_233514_sector_momentum_252d_top4_0b22853c",
+    "exp_dir": "20260423_233514_sector_momentum_210d_top4_0b22853c",
     "metrics": {
       "total_return": 3.04001,
       "cagr": 0.091268,
@@ -651,8 +651,8 @@
   {
     "experiment_id": "cbb8253f-1850-48e2-9234-1373203b0fdc",
     "created_at": "2026-04-24T00:02:39",
-    "strategy_name": "sector_momentum_252d_top4",
-    "description": "Sector ETF rotation: top-4 by 252-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "strategy_name": "sector_momentum_210d_top4",
+    "description": "Sector ETF rotation: top-4 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -675,7 +675,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260424_000239_sector_momentum_252d_top4_cbb8253f",
+    "exp_dir": "20260424_000239_sector_momentum_210d_top4_cbb8253f",
     "metrics": {
       "total_return": 2.989256,
       "cagr": 0.090405,
@@ -690,8 +690,8 @@
   {
     "experiment_id": "a41d1108-e008-4cc9-8721-42e394467807",
     "created_at": "2026-04-24T00:05:07",
-    "strategy_name": "sector_momentum_252d_top3",
-    "description": "Sector ETF rotation: top-3 by 252-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -714,7 +714,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260424_000507_sector_momentum_252d_top3_a41d1108",
+    "exp_dir": "20260424_000507_sector_momentum_210d_top3_a41d1108",
     "metrics": {
       "total_return": 2.929862,
       "cagr": 0.089382,
@@ -729,8 +729,8 @@
   {
     "experiment_id": "bf010f88-6d32-43d8-ae26-a461205eef9e",
     "created_at": "2026-04-24T00:06:05",
-    "strategy_name": "sector_momentum_252d_top2",
-    "description": "Sector ETF rotation: top-2 by 252-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "strategy_name": "sector_momentum_210d_top2",
+    "description": "Sector ETF rotation: top-2 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
     "tags": [
       "sector-rotation",
       "momentum",
@@ -753,7 +753,7 @@
     ],
     "period_start": "2010-01-04",
     "period_end": "2025-12-30",
-    "exp_dir": "20260424_000605_sector_momentum_252d_top2_bf010f88",
+    "exp_dir": "20260424_000605_sector_momentum_210d_top2_bf010f88",
     "metrics": {
       "total_return": 3.65188,
       "cagr": 0.100937,
@@ -1270,6 +1270,840 @@
       "annual_volatility": 0.138443,
       "annual_turnover": 2.265474,
       "benchmark_return": 7.071744
+    }
+  },
+  {
+    "experiment_id": "f91c4cbb-0c00-4c33-bc1e-cfb3dc61c51b",
+    "created_at": "2026-04-24T00:56:14",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "baseline"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_005614_sector_momentum_210d_top3_f91c4cbb",
+    "metrics": {
+      "total_return": 3.697736,
+      "cagr": 0.101613,
+      "sharpe_ratio": 0.926143,
+      "sortino_ratio": 1.29102,
+      "max_drawdown": 0.203814,
+      "annual_volatility": 0.138443,
+      "annual_turnover": 2.265474,
+      "benchmark_return": 7.071743
+    }
+  },
+  {
+    "experiment_id": "617fa3c5-ab12-4214-9ca8-22217c4d1876",
+    "created_at": "2026-04-24T00:56:14",
+    "strategy_name": "sector_momentum_210d_top3_absfilter0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "abs-momentum-filter"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_005614_sector_momentum_210d_top3_absf_617fa3c5",
+    "metrics": {
+      "total_return": 3.176309,
+      "cagr": 0.093535,
+      "sharpe_ratio": 0.849069,
+      "sortino_ratio": 1.175199,
+      "max_drawdown": 0.225083,
+      "annual_volatility": 0.141091,
+      "annual_turnover": 2.484713,
+      "benchmark_return": 7.071743
+    }
+  },
+  {
+    "experiment_id": "472ad499-5671-4cbe-a854-cf9ca5f2b1b7",
+    "created_at": "2026-04-24T00:57:41",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "baseline"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_005741_sector_momentum_210d_top3_472ad499",
+    "metrics": {
+      "total_return": 3.697736,
+      "cagr": 0.101613,
+      "sharpe_ratio": 0.926142,
+      "sortino_ratio": 1.291019,
+      "max_drawdown": 0.203814,
+      "annual_volatility": 0.138443,
+      "annual_turnover": 2.265474,
+      "benchmark_return": 7.071745
+    }
+  },
+  {
+    "experiment_id": "fdcedcb0-902f-4afe-b7f2-7e4fbc0d7950",
+    "created_at": "2026-04-24T00:57:41",
+    "strategy_name": "sector_momentum_210d_top3_absfilter0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "abs-momentum-filter"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_005741_sector_momentum_210d_top3_absf_fdcedcb0",
+    "metrics": {
+      "total_return": 3.176305,
+      "cagr": 0.093535,
+      "sharpe_ratio": 0.849068,
+      "sortino_ratio": 1.175198,
+      "max_drawdown": 0.225084,
+      "annual_volatility": 0.141091,
+      "annual_turnover": 2.484713,
+      "benchmark_return": 7.071745
+    }
+  },
+  {
+    "experiment_id": "e6f1b259-adb7-478f-a570-ee6fd89207a5",
+    "created_at": "2026-04-24T01:06:14",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "baseline"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_010614_sector_momentum_210d_top3_e6f1b259",
+    "metrics": {
+      "total_return": 3.697734,
+      "cagr": 0.101613,
+      "sharpe_ratio": 0.926142,
+      "sortino_ratio": 1.291019,
+      "max_drawdown": 0.203814,
+      "annual_volatility": 0.12638,
+      "annual_turnover": 1.887895,
+      "benchmark_return": 7.071742
+    }
+  },
+  {
+    "experiment_id": "1af75bdb-40c3-41ba-97aa-60888e04d3d2",
+    "created_at": "2026-04-24T01:06:14",
+    "strategy_name": "sector_momentum_210d_top3_absfilter0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "abs-momentum-filter"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_010614_sector_momentum_210d_top3_absf_1af75bdb",
+    "metrics": {
+      "total_return": 3.176307,
+      "cagr": 0.093535,
+      "sharpe_ratio": 0.849068,
+      "sortino_ratio": 1.175198,
+      "max_drawdown": 0.225084,
+      "annual_volatility": 0.128798,
+      "annual_turnover": 2.070594,
+      "benchmark_return": 7.071742
+    }
+  },
+  {
+    "experiment_id": "71899625-7130-4df9-a78e-47c15ec3382d",
+    "created_at": "2026-04-24T01:17:03",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "baseline"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_011703_sector_momentum_210d_top3_71899625",
+    "metrics": {
+      "total_return": 3.697737,
+      "cagr": 0.101613,
+      "sharpe_ratio": 0.926143,
+      "sortino_ratio": 1.29102,
+      "max_drawdown": 0.203814,
+      "annual_volatility": 0.138443,
+      "annual_turnover": 2.265474,
+      "benchmark_return": 7.071744
+    }
+  },
+  {
+    "experiment_id": "02f2d379-a7b4-4840-a774-7d59dd771ef6",
+    "created_at": "2026-04-24T01:17:03",
+    "strategy_name": "sector_momentum_210d_top3_absfilter0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight",
+      "abs-momentum-filter"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_011703_sector_momentum_210d_top3_absf_02f2d379",
+    "metrics": {
+      "total_return": 3.176308,
+      "cagr": 0.093535,
+      "sharpe_ratio": 0.849068,
+      "sortino_ratio": 1.175199,
+      "max_drawdown": 0.225084,
+      "annual_volatility": 0.141091,
+      "annual_turnover": 2.484713,
+      "benchmark_return": 7.071744
+    }
+  },
+  {
+    "experiment_id": "0a066a56-9937-4c3c-8166-827d021b9b0f",
+    "created_at": "2026-04-24T01:18:25",
+    "strategy_name": "sector_momentum_252d_top2",
+    "description": "Sector ETF rotation: top-2 by 252-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top2",
+      "equal-weight",
+      "baseline"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_011825_sector_momentum_252d_top2_0a066a56",
+    "metrics": {
+      "total_return": 3.651881,
+      "cagr": 0.100937,
+      "sharpe_ratio": 0.907312,
+      "sortino_ratio": 1.264768,
+      "max_drawdown": 0.214601,
+      "annual_volatility": 0.140963,
+      "annual_turnover": 2.912752,
+      "benchmark_return": 7.071745
+    }
+  },
+  {
+    "experiment_id": "b6706583-dae9-42b0-a816-1378920c700a",
+    "created_at": "2026-04-24T01:18:25",
+    "strategy_name": "sector_momentum_252d_top2_absfilter0.0",
+    "description": "Sector ETF rotation: top-2 by 252-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top2",
+      "equal-weight",
+      "abs-momentum-filter"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_011825_sector_momentum_252d_top2_absf_b6706583",
+    "metrics": {
+      "total_return": 3.513709,
+      "cagr": 0.098863,
+      "sharpe_ratio": 0.893279,
+      "sortino_ratio": 1.243398,
+      "max_drawdown": 0.214601,
+      "annual_volatility": 0.140555,
+      "annual_turnover": 2.975391,
+      "benchmark_return": 7.071745
+    }
+  },
+  {
+    "experiment_id": "70c5f02d-4088-4d1e-bacd-34753520d152",
+    "created_at": "2026-04-24T01:39:42",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "baseline",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_013942_sector_momentum_210d_top3_70c5f02d",
+    "metrics": {
+      "total_return": 5.062614,
+      "cagr": 0.11933,
+      "sharpe_ratio": 1.015166,
+      "sortino_ratio": 1.417889,
+      "max_drawdown": 0.230108,
+      "annual_volatility": 0.146653,
+      "annual_turnover": 2.181954,
+      "benchmark_return": 7.071742
+    }
+  },
+  {
+    "experiment_id": "0095c377-32f6-4ff9-a227-e86b78f29c92",
+    "created_at": "2026-04-24T01:39:42",
+    "strategy_name": "sector_momentum_210d_top3_ief_fallback_0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "ief-fallback",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_013942_sector_momentum_210d_top3_ief__0095c377",
+    "metrics": {
+      "total_return": 4.122919,
+      "cagr": 0.1076,
+      "sharpe_ratio": 0.942934,
+      "sortino_ratio": 1.311164,
+      "max_drawdown": 0.230108,
+      "annual_volatility": 0.143909,
+      "annual_turnover": 2.453393,
+      "benchmark_return": 7.071742
+    }
+  },
+  {
+    "experiment_id": "7777da3d-a7a8-4679-9030-3afa00048a65",
+    "created_at": "2026-04-24T01:40:27",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "baseline",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_014027_sector_momentum_210d_top3_7777da3d",
+    "metrics": {
+      "total_return": 5.062615,
+      "cagr": 0.11933,
+      "sharpe_ratio": 1.015166,
+      "sortino_ratio": 1.417889,
+      "max_drawdown": 0.230107,
+      "annual_volatility": 0.146653,
+      "annual_turnover": 2.181954,
+      "benchmark_return": 7.071739
+    }
+  },
+  {
+    "experiment_id": "09074b08-44ac-4508-adac-fa672d41408a",
+    "created_at": "2026-04-24T01:40:27",
+    "strategy_name": "sector_momentum_210d_top3_ief_fallback_0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "ief-fallback",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_014027_sector_momentum_210d_top3_ief__09074b08",
+    "metrics": {
+      "total_return": 4.122919,
+      "cagr": 0.1076,
+      "sharpe_ratio": 0.942934,
+      "sortino_ratio": 1.311163,
+      "max_drawdown": 0.230107,
+      "annual_volatility": 0.143909,
+      "annual_turnover": 2.453393,
+      "benchmark_return": 7.071739
+    }
+  },
+  {
+    "experiment_id": "b1cb5311-fe19-4e49-89a7-6e3564605941",
+    "created_at": "2026-04-24T01:43:09",
+    "strategy_name": "sector_momentum_252d_top2",
+    "description": "Sector ETF rotation: top-2 by 252-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "baseline",
+      "top2",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_014309_sector_momentum_252d_top2_b1cb5311",
+    "metrics": {
+      "total_return": 4.065482,
+      "cagr": 0.106819,
+      "sharpe_ratio": 0.88247,
+      "sortino_ratio": 1.239248,
+      "max_drawdown": 0.260811,
+      "annual_volatility": 0.155068,
+      "annual_turnover": 2.568233,
+      "benchmark_return": 7.071743
+    }
+  },
+  {
+    "experiment_id": "6d111261-bbaa-4531-be60-299d2dce222e",
+    "created_at": "2026-04-24T01:43:09",
+    "strategy_name": "sector_momentum_252d_top2_ief_fallback_0.0",
+    "description": "Sector ETF rotation: top-2 by 252-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "ief-fallback",
+      "top2",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_014309_sector_momentum_252d_top2_ief__6d111261",
+    "metrics": {
+      "total_return": 3.821599,
+      "cagr": 0.103408,
+      "sharpe_ratio": 0.860631,
+      "sortino_ratio": 1.205482,
+      "max_drawdown": 0.260811,
+      "annual_volatility": 0.154573,
+      "annual_turnover": 2.630872,
+      "benchmark_return": 7.071743
+    }
+  },
+  {
+    "experiment_id": "3507f8a8-a212-439c-920d-5f64c9cf3ede",
+    "created_at": "2026-04-24T01:45:35",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "baseline",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_014535_sector_momentum_210d_top3_3507f8a8",
+    "metrics": {
+      "total_return": 5.062616,
+      "cagr": 0.11933,
+      "sharpe_ratio": 1.015166,
+      "sortino_ratio": 1.417889,
+      "max_drawdown": 0.230108,
+      "annual_volatility": 0.146653,
+      "annual_turnover": 2.181954,
+      "benchmark_return": 7.071745
+    }
+  },
+  {
+    "experiment_id": "03e13421-8ef8-4a9b-ad2a-a988488435b4",
+    "created_at": "2026-04-24T01:45:35",
+    "strategy_name": "sector_momentum_210d_top3_ief_fallback_0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "ief-fallback",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_014535_sector_momentum_210d_top3_ief__03e13421",
+    "metrics": {
+      "total_return": 4.122922,
+      "cagr": 0.1076,
+      "sharpe_ratio": 0.942934,
+      "sortino_ratio": 1.311164,
+      "max_drawdown": 0.230108,
+      "annual_volatility": 0.143909,
+      "annual_turnover": 2.453393,
+      "benchmark_return": 7.071745
+    }
+  },
+  {
+    "experiment_id": "402cb649-c72a-442a-a9d5-5c8b416e88f9",
+    "created_at": "2026-04-24T01:49:20",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing. Universe: VNQ, QQQ, XLE, XLV, XLF, XLI, XLB, SPY, XLP, IEF.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_014920_sector_momentum_210d_top3_402cb649",
+    "metrics": {
+      "total_return": 3.69774,
+      "cagr": 0.101613,
+      "sharpe_ratio": 0.926143,
+      "sortino_ratio": 1.29102,
+      "max_drawdown": 0.203814,
+      "annual_volatility": 0.138443,
+      "annual_turnover": 2.265474,
+      "benchmark_return": 7.071742
+    }
+  },
+  {
+    "experiment_id": "a7ff2d94-2fcc-463d-8c55-04b4ac077a16",
+    "created_at": "2026-04-24T11:47:56",
+    "strategy_name": "sector_momentum_210d_top3",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "baseline",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_114756_sector_momentum_210d_top3_a7ff2d94",
+    "metrics": {
+      "total_return": 5.062619,
+      "cagr": 0.11933,
+      "sharpe_ratio": 1.015166,
+      "sortino_ratio": 1.417889,
+      "max_drawdown": 0.230108,
+      "annual_volatility": 0.146653,
+      "annual_turnover": 2.181954,
+      "benchmark_return": 7.071741
+    }
+  },
+  {
+    "experiment_id": "fc27d454-6be7-4f44-9cdb-8a25eab6770d",
+    "created_at": "2026-04-24T11:47:56",
+    "strategy_name": "sector_momentum_210d_top3_ief_fallback_0.0",
+    "description": "Sector ETF rotation: top-3 by 210-day momentum, monthly rebalancing.",
+    "tags": [
+      "sector-rotation",
+      "momentum",
+      "etf",
+      "monthly",
+      "ief-fallback",
+      "top3",
+      "equal-weight"
+    ],
+    "symbols": [
+      "VNQ",
+      "QQQ",
+      "XLE",
+      "XLV",
+      "XLF",
+      "XLI",
+      "XLB",
+      "SPY",
+      "XLP",
+      "IEF"
+    ],
+    "period_start": "2010-01-04",
+    "period_end": "2025-12-30",
+    "exp_dir": "20260424_114756_sector_momentum_210d_top3_ief__fc27d454",
+    "metrics": {
+      "total_return": 4.122928,
+      "cagr": 0.1076,
+      "sharpe_ratio": 0.942935,
+      "sortino_ratio": 1.311164,
+      "max_drawdown": 0.230108,
+      "annual_volatility": 0.143909,
+      "annual_turnover": 2.453393,
+      "benchmark_return": 7.071741
     }
   }
 ]
