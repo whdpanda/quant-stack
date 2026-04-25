@@ -7,15 +7,27 @@ Look-ahead prevention
     Implemented by shifting the order index forward by 1 business day.
     The caller must ensure weights are computed without future knowledge.
 
-Monthly rebalancing
-    config.rebalance_freq = "ME" resamples the weight series to month-end,
-    then shifts the execution index by 1 BDay. On all other bars vectorbt
-    receives NaN → it holds the last position without trading.
+Bi-monthly rebalancing (formal strategy)
+    config.rebalance_freq = "2ME" resamples the weight series to every
+    second month-end, then shifts the execution index by 1 BDay.  On all
+    other bars vectorbt receives NaN → it holds the last position without
+    trading.
 
 CASH column
     Silently excluded before passing size to vectorbt. An allocator that
     reserves a cash_buffer (e.g., weights["CASH"] = 0.1) will naturally
     leave that fraction uninvested in the vbt portfolio.
+
+Execution consistency boundary
+    Signals and weights produced here carry SignalSource.RESEARCH semantics.
+    A future live-execution layer MUST re-generate signals at runtime from
+    live market data — it must never replay RESEARCH signals directly.
+    The 1-BDay shift above models T+1 execution; a live system must replicate
+    this by scheduling weight computation at market close and submitting
+    orders for the next open (or VWAP/close order for the next session).
+    Cost model: commission + slippage are each one-way fractions. Formal
+    strategy uses 10 bps each (20 bps total).  Measure actual execution
+    costs against this assumption before live deployment.
 
 Inputs
     close   : daily adjusted-close prices, DatetimeIndex × symbol columns.
@@ -160,6 +172,62 @@ def run_vbt_backtest(
         benchmark_return=benchmark_return,
         symbols=asset_cols,
     )
+
+
+def get_portfolio_daily_returns(
+    close: pd.DataFrame,
+    weights: pd.DataFrame,
+    config: VbtRunConfig | None = None,
+) -> pd.Series:
+    """Run a weight-based portfolio and return the daily return series.
+
+    Uses identical look-ahead prevention, cost model, and rebalancing logic
+    as run_vbt_backtest().  The returned series starts from the first
+    execution date (after the 1-BDay shift) and has the same DatetimeIndex
+    as close.
+
+    Args:
+        close: Daily adjusted-close prices.
+        weights: Target weights (same columns; CASH excluded automatically).
+        config: Runtime parameters.  Defaults to VbtRunConfig().
+
+    Returns:
+        pd.Series of daily portfolio returns (fractional, not percent).
+    """
+    try:
+        import vectorbt as vbt
+    except ImportError as exc:
+        raise ImportError(
+            "vectorbt is not installed: pip install 'quant-stack[research]'"
+        ) from exc
+
+    if config is None:
+        config = VbtRunConfig()
+
+    close = close.sort_index()
+    weights = weights.sort_index()
+
+    asset_cols = [c for c in weights.columns if c != "CASH"]
+    close_assets = close[asset_cols]
+
+    orders = _prepare_orders(close_assets, weights[asset_cols], config.rebalance_freq)
+
+    portfolio = vbt.Portfolio.from_orders(
+        close=close_assets,
+        size=orders,
+        size_type="targetpercent",
+        fees=config.commission,
+        slippage=config.slippage,
+        init_cash=config.initial_cash,
+        cash_sharing=True,
+        group_by=True,
+        freq=config.freq,
+    )
+
+    rets = portfolio.returns()
+    if isinstance(rets, pd.DataFrame):
+        rets = rets.iloc[:, 0]
+    return rets.rename("strategy")
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────

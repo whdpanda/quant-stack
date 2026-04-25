@@ -4,9 +4,9 @@ Logic (Quantpedia sector-rotation template)
 -------------------------------------------
 Universe  : N sector or style ETFs (caller-supplied via close columns)
 Momentum  : price ROC over *momentum_window* trading days
-            Default 252 ≈ 12 calendar months
+            Default 210 ≈ 10 calendar months
 Ranking   : cross-sectional; top *top_n* ETFs receive signal = 1.0
-Holding   : equal-weight (strength uniform across longs)
+Holding   : blend_70_30 (70% equal + 30% inverse-vol) by default
 Rebalance : bi-monthly (every 2 months) — enforced by the backtest adapter, NOT here
             (set VbtRunConfig.rebalance_freq = "2ME" in the caller)
 
@@ -66,15 +66,24 @@ class HysteresisMode(StrEnum):
 # Single source of truth for all sector momentum experiments.
 # IEF is deliberately excluded: it is a defensive fallback asset, not a
 # risk-on ranking candidate.
+#
+# Universe history:
+#   2026-04-24: GDX replaced SPY (18-candidate study; GDX superior on all 3 metrics)
+#   2026-04-25: IYT replaced VNQ (10-candidate study; IYT: dSharpe=+0.063, dCAGR=+1.01%,
+#               dMaxDD=-1.41% — robust win on all three criteria)
+#
+# IMPORTANT: asset order is significant.  relative_momentum_ranking_signal uses
+# method="first" for tie-breaking, so column order determines outcomes in ties.
+# IYT occupies index 0 (formerly VNQ's slot) — preserve this order in all studies.
 RISK_ON_UNIVERSE: list[str] = [
-    "VNQ",  # Real Estate
+    "IYT",  # Transportation (iShares) — consolidated 2026-04-25, replaces VNQ
     "QQQ",  # Technology / Nasdaq
     "XLE",  # Energy
     "XLV",  # Health Care
     "XLF",  # Financials
     "XLI",  # Industrials
     "VTV",  # Vanguard Value ETF
-    "GDX",  # VanEck Gold Miners
+    "GDX",  # VanEck Gold Miners — consolidated 2026-04-24, replaces SPY
     "XLP",  # Consumer Staples
 ]
 

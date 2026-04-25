@@ -190,6 +190,8 @@ class ExperimentTracker:
                 "annual_volatility": r.annual_volatility,
                 "annual_turnover": r.annual_turnover,
                 "benchmark_return": r.benchmark_return,
+                "commission_paid": r.commission_paid,
+                "n_trades": float(r.n_trades),
             }.items():
                 if val is not None:
                     metrics[key] = round(val, 6)

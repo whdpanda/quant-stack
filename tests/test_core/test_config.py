@@ -81,7 +81,7 @@ class TestAppConfig:
 class TestLoadConfig:
     def test_load_settings_yaml(self) -> None:
         cfg = load_config("config/settings.yaml")
-        assert cfg.strategy.lookback_days == 252
+        assert cfg.strategy.lookback_days == 210
         assert cfg.execution.mode == "paper"
         assert cfg.execution.risk.max_drawdown_halt == 0.15
 

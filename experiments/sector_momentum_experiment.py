@@ -1,28 +1,23 @@
-"""Sector ETF Momentum — Formal Strategy (blend_70_30 weighting).
+"""Sector ETF Momentum — Formal Strategy (IYT universe, blend_70_30 weighting).
 
 Strategy
 --------
-Universe  : VNQ QQQ XLE XLV XLF XLI VTV GDX XLP  (9 risk-on ETFs, from RISK_ON_UNIVERSE)
-            GDX consolidated 2026-04-25: replaces SPY after exhaustive universe study
-            (18 candidates tested; GDX beat SPY on Sharpe/CAGR/MaxDD simultaneously)
+Universe  : IYT QQQ XLE XLV XLF XLI VTV GDX XLP  (9 risk-on ETFs, from RISK_ON_UNIVERSE)
+            GDX consolidated 2026-04-24: replaced SPY (18-candidate study)
+            IYT consolidated 2026-04-25: replaced VNQ (10-candidate study)
+              IYT vs VNQ  dSharpe=+0.063  dCAGR=+1.01%  dMaxDD=-1.41%  → robust win
 Momentum  : 210-day price ROC (~10 calendar months)
 Selection : top-3 ETFs by cross-sectional momentum rank
 Weighting : blend_70_30 — 70% equal + 30% inverse-volatility, renormalised.
             Vol window = 63 trading days (≈3 calendar months).
-            Scheme consolidated from weighting study (2026-04-24, SPY-era universe):
-              equal       Sharpe=1.091  CAGR=12.47%  MaxDD=22.17%
-              blend_70_30 Sharpe=1.089  CAGR=12.27%  MaxDD=21.75%  ← winner (best risk-adjusted)
-              blend_50_50 Sharpe=1.086  CAGR=12.12%  MaxDD=21.41%
-              inverse_vol Sharpe=1.073  CAGR=11.67%  MaxDD=20.57%
-            GDX-universe baseline (2010-2025, 2026-04-25):
-              blend_70_30 Sharpe=1.096  CAGR=13.14%  MaxDD=21.53%
 Rebalance : bi-monthly (every 2 months, 2ME), executed next business day
 Hysteresis: entry_margin=0.02 — a new asset displaces the worst-ranked held asset
             only when its 210-day ROC exceeds the displaced asset's ROC by ≥ 2 pp.
-            Mode consolidated from hysteresis study (2026-04-24, SPY-era universe):
-              entry_margin  Sharpe=1.091  CAGR=12.47%  MaxDD=22.17%  ← winner
-              no_hysteresis Sharpe=1.048  CAGR=12.11%  MaxDD=22.17%
+Costs     : 20 bps total per side (10 bps commission + 10 bps slippage, default VbtRunConfig)
 Benchmark : SPY buy-and-hold
+
+IYT baseline (2010-2025, confirmed 2026-04-25):
+    Sharpe=1.162  CAGR=14.13%  MaxDD=20.12%
 
 Run
 ---
@@ -60,7 +55,7 @@ from quant_stack.tracking import ExperimentTracker
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-BENCHMARK    = "SPY"   # buy-and-hold benchmark; GDX is now a ranking candidate, not the benchmark
+BENCHMARK    = "SPY"
 PERIOD_START = date(2010, 1, 1)
 PERIOD_END   = date(2025, 12, 31)
 
@@ -68,10 +63,10 @@ STRATEGY_PARAMS = {
     "momentum_window":  210,
     "top_n":            3,
     "rebalance_freq":   "2ME",
-    "commission_bps":   10,
+    "total_cost_bps":   20,            # 10 bps commission + 10 bps slippage (VbtRunConfig defaults)
     "hysteresis_mode":  "entry_margin",
-    "entry_margin":     0.02,          # new asset must beat displaced by ≥ 2pp ROC
-    "weighting_scheme": "blend_70_30", # 70% equal + 30% inverse_vol, vol_window=63d
+    "entry_margin":     0.02,
+    "weighting_scheme": "blend_70_30",
     "vol_window":       63,
 }
 
@@ -126,8 +121,10 @@ weights = signal_frame_to_weights(sf)
 
 # ── 3. Backtest ────────────────────────────────────────────────────────────────
 
+half_bps = STRATEGY_PARAMS["total_cost_bps"] / 2 / 10_000
 vbt_cfg = VbtRunConfig(
-    commission=STRATEGY_PARAMS["commission_bps"] / 10_000,
+    commission=half_bps,
+    slippage=half_bps,
     rebalance_freq=STRATEGY_PARAMS["rebalance_freq"],
     risk_free_rate=0.05,
 )
@@ -212,4 +209,5 @@ for entry in tracker.list_experiments(tag="sector-rotation", limit=5):
         f"  {entry['created_at'][:19]}  {entry['strategy_name']:<44}"
         f"  CAGR={m.get('cagr', float('nan')):.2%}"
         f"  Sharpe={m.get('sharpe_ratio', float('nan')):.3f}"
+        f"  Paid=${m.get('commission_paid', 0):,.0f}"
     )

@@ -1,20 +1,26 @@
 # quant-stack — Project settings
 # Override only what differs from default.yaml.
 # See config/default.yaml for all available options and documentation.
+#
+# Formal strategy (as of 2026-04-25):
+#   Sector ETF momentum, 210d lookback, top-3, bi-monthly (2ME),
+#   blend_70_30 weighting, entry_margin hysteresis (0.02),
+#   20 bps total cost (10 commission + 10 slippage).
+#   Universe: IYT QQQ XLE XLV XLF XLI VTV GDX XLP
 
 data:
   cache_dir: ./data
   default_provider: yahoo
-  default_start: "2018-01-01"
-  default_end: "2024-12-31"
+  default_start: "2010-01-01"
+  default_end: "2025-12-31"
   adjust_prices: true
   fill_method: ffill
   fill_limit: 5
 
 strategy:
   default_freq: "1D"
-  universe: [SPY, QQQ, IEF, GLD]
-  lookback_days: 252
+  universe: [IYT, QQQ, XLE, XLV, XLF, XLI, VTV, GDX, XLP]
+  lookback_days: 210
 
 portfolio:
   method: max_sharpe
@@ -35,7 +41,6 @@ reporting:
 
 execution:
   mode: paper
-  lean_config_path: ./lean/config.json
   risk:
     max_position_size: 0.40
     max_drawdown_halt: 0.15
