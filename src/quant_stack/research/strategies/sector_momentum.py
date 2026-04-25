@@ -76,7 +76,7 @@ class HysteresisMode(StrEnum):
 # method="first" for tie-breaking, so column order determines outcomes in ties.
 # IYT occupies index 0 (formerly VNQ's slot) — preserve this order in all studies.
 RISK_ON_UNIVERSE: list[str] = [
-    "IYT",  # Transportation (iShares) — consolidated 2026-04-25, replaces VNQ
+    "IYT",  # Transportation (iShares) 
     "QQQ",  # Technology / Nasdaq
     "XLE",  # Energy
     "XLV",  # Health Care
