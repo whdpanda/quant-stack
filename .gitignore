@@ -24,3 +24,6 @@ experiments/records/*.json
 experiments/**/record.json
 experiments/**/report.md
 experiments/registry.json
+# Execution runtime artifacts
+execution_artifacts/
+lean_output/

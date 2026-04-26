@@ -367,13 +367,14 @@ class RebalanceService:
         """Write order_plan.json and execution_log.txt to artifacts_dir."""
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        mode = result.adapter_mode  # include adapter mode to prevent same-second collision
 
         # ── Execution log ──────────────────────────────────────────────────
-        log_path = self.artifacts_dir / f"{ts}_execution_log.txt"
+        log_path = self.artifacts_dir / f"{ts}_{mode}_execution_log.txt"
         log_path.write_text("\n".join(result.log_entries), encoding="utf-8")
 
         # ── Order plan (JSON) ──────────────────────────────────────────────
-        plan_path = self.artifacts_dir / f"{ts}_order_plan.json"
+        plan_path = self.artifacts_dir / f"{ts}_{mode}_order_plan.json"
         plan_data: dict = {
             "plan_id": plan.plan_id,
             "created_at": plan.created_at.isoformat(),

@@ -415,6 +415,34 @@ class TestPaperAdapter:
         svc.run(target, snapshot_cash)
         assert adapter.positions == {}
 
+    def test_held_positions_carried_over_when_delta_below_threshold(
+        self, risk, tmp_path
+    ) -> None:
+        # QQQ/XLI delta is tiny (below default min_trade_size=0.005) → not in orders.
+        # They must still appear in adapter.positions after execution.
+        target_partial = TargetWeights(
+            strategy_name="test_partial",
+            rebalance_date=date(2025, 12, 31),
+            weights={"QQQ": 0.3333, "XLI": 0.3333, "GDX": 0.3333},
+        )
+        snapshot_partial = PositionSnapshot(
+            timestamp=datetime(2025, 12, 31),
+            nav=100_000.0,
+            positions={"QQQ": 0.333, "XLV": 0.333, "XLI": 0.334},
+            cash_fraction=0.0,
+        )
+        adapter = PaperExecutionAdapter()
+        svc = RebalanceService(
+            adapter=adapter, risk=risk, dry_run=False, artifacts_dir=tmp_path
+        )
+        svc.run(target_partial, snapshot_partial)
+
+        pos = adapter.positions
+        assert "GDX" in pos,  "GDX must be added (BUY order executed)"
+        assert "XLV" not in pos, "XLV must be removed (SELL+LIQUIDATE)"
+        assert "QQQ" in pos,  "QQQ must be retained (delta < threshold → carry-over)"
+        assert "XLI" in pos,  "XLI must be retained (delta < threshold → carry-over)"
+
 
 # ── LeanExecutionAdapter ──────────────────────────────────────────────────────
 
@@ -457,6 +485,37 @@ class TestLeanAdapter:
         data = __import__("json").loads(out.read_text())
         assert "weights" in data
         assert data["metadata"]["risk_checks_passed"] is True
+
+    def test_consecutive_runs_produce_unique_files(
+        self, target, snapshot_cash, risk, tmp_path
+    ) -> None:
+        lean_dir = tmp_path / "lean"
+        adapter1 = LeanExecutionAdapter(output_dir=lean_dir)
+        svc1 = RebalanceService(
+            adapter=adapter1, risk=risk, dry_run=False, artifacts_dir=tmp_path / "a1"
+        )
+        svc1.run(target, snapshot_cash)
+
+        # Change target slightly so duplicate guard doesn't fire
+        target2 = TargetWeights(
+            strategy_name=target.strategy_name,
+            rebalance_date=date(2026, 1, 31),
+            weights={"QQQ": 0.40, "XLI": 0.35, "GDX": 0.25},
+        )
+        adapter2 = LeanExecutionAdapter(output_dir=lean_dir)
+        svc2 = RebalanceService(
+            adapter=adapter2, risk=risk, dry_run=False, artifacts_dir=tmp_path / "a2"
+        )
+        svc2.run(target2, snapshot_cash)
+
+        unique_files = [
+            f for f in lean_dir.iterdir()
+            if f.name != "target_weights.json"
+        ]
+        assert len(unique_files) == 2, (
+            f"Expected 2 unique payload files, got {[f.name for f in lean_dir.iterdir()]}"
+        )
+        assert (lean_dir / "target_weights.json").exists(), "latest alias must exist"
 
     def test_payload_metadata_fields(
         self, target, snapshot_cash, risk, tmp_path

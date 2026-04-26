@@ -44,6 +44,7 @@ LeanExecutionAdapter
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -165,6 +166,19 @@ class PaperExecutionAdapter:
                 log.append(f"  [REJECT] {order.symbol}: {exc}")
                 rejected += 1
 
+        # Carry over held positions: target symbols skipped by min_trade_size filter.
+        # These symbols were not in plan.orders (delta too small), so the fills loop
+        # never wrote them.  Without this step they would vanish from internal state.
+        if not dry_run:
+            for sym, cur_w in plan.decision.snapshot.positions.items():
+                if (
+                    sym in plan.decision.target.weights
+                    and sym not in self._paper_positions
+                    and cur_w > 0
+                ):
+                    self._paper_positions[sym] = cur_w
+                    log.append(f"  [HOLD]      {sym:6s}  {cur_w:.2%} (unchanged)")
+
         # Liquidate symbols no longer in target
         if not dry_run:
             for sym in list(self._paper_positions):
@@ -240,22 +254,24 @@ class LeanExecutionAdapter:
         ]
 
         if not dry_run:
-            self._write_payload(payload)
-            log.append(
-                f"  written  : {(self.output_dir / 'target_weights.json').resolve()}"
-            )
+            unique_path, latest_path = self._write_payload(payload)
+            log.append(f"  written  : {unique_path.resolve()}")
+            log.append(f"  latest   : {latest_path.resolve()}")
         else:
             log.append("  dry_run=True — payload not written to disk")
 
         for entry in log:
             logger.info(entry)
 
+        nav = plan.decision.snapshot.nav
+        est_cost = plan.total_turnover * plan.estimated_cost_bps / 10_000 * nav
         return ExecutionResult(
             plan_id=plan.plan_id,
             adapter_mode=self.mode,
             orders_attempted=len(plan.orders),
             orders_filled=len(plan.orders) if not dry_run else 0,
             orders_rejected=0,
+            estimated_cost=est_cost,
             lean_payload=payload,
             log_entries=log,
             success=True,
@@ -294,9 +310,32 @@ class LeanExecutionAdapter:
             },
         }
 
-    def _write_payload(self, payload: dict) -> None:
-        """Write the JSON payload to disk for LEAN algorithm to read."""
+    def _write_payload(self, payload: dict) -> tuple[Path, Path]:
+        """Write the JSON payload to disk for LEAN algorithm to read.
+
+        Writes two files:
+          1. Unique file: ``{rebalance_date}_{strategy}_{plan_id[:8]}_weights.json``
+             — permanent audit record, never overwritten.
+          2. ``target_weights.json`` — latest-alias read by SectorMomentumAlgorithm.
+
+        Returns:
+            (unique_path, latest_path)
+        """
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        path = self.output_dir / "target_weights.json"
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        logger.info(f"[LEAN] Payload written → {path.resolve()}")
+
+        rebalance_date = payload.get("rebalance_date", "unknown")
+        strategy_raw = payload.get("strategy_name", "strategy")
+        plan_id = payload.get("metadata", {}).get("plan_id", "")[:8]
+        safe_strategy = re.sub(r"[^\w]", "_", strategy_raw)[:30]
+        unique_name = f"{rebalance_date}_{safe_strategy}_{plan_id}_weights.json"
+
+        content = json.dumps(payload, indent=2)
+        unique_path = self.output_dir / unique_name
+        unique_path.write_text(content, encoding="utf-8")
+
+        latest_path = self.output_dir / "target_weights.json"
+        latest_path.write_text(content, encoding="utf-8")
+
+        logger.info(f"[LEAN] Payload written → {unique_path.resolve()}")
+        logger.info(f"[LEAN] Latest alias    → {latest_path.resolve()}")
+        return unique_path, latest_path
