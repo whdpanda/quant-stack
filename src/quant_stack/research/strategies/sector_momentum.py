@@ -83,7 +83,7 @@ RISK_ON_UNIVERSE: list[str] = [
     "XLF",  # Financials
     "XLI",  # Industrials
     "VTV",  # Vanguard Value ETF
-    "GDX",  # VanEck Gold Miners — consolidated 2026-04-24, replaces SPY
+    "GDX",  # VanEck Gold Miners
     "XLP",  # Consumer Staples
 ]
 
