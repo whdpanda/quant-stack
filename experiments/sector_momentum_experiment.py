@@ -1,23 +1,26 @@
-"""Sector ETF Momentum — Formal Strategy (IYT universe, blend_70_30 weighting).
+"""Sector ETF Momentum — Formal Strategy (IBB universe, blend_70_30 weighting).
 
 Strategy
 --------
-Universe  : IYT QQQ XLE XLV XLF XLI VTV GDX XLP  (9 risk-on ETFs, from RISK_ON_UNIVERSE)
+Universe  : IBB QQQ XLE XLV XLF XLI VTV GDX XLP  (9 risk-on ETFs, from RISK_ON_UNIVERSE)
             GDX consolidated 2026-04-24: replaced SPY (18-candidate study)
             IYT consolidated 2026-04-25: replaced VNQ (10-candidate study)
-              IYT vs VNQ  dSharpe=+0.063  dCAGR=+1.01%  dMaxDD=-1.41%  → robust win
+              IYT vs VNQ  dSharpe=+0.063  dCAGR=+1.01%  dMaxDD=-1.41%  -- robust win
+            IBB consolidated 2026-04-28: replaced IYT (9-candidate Rakuten study)
+              IYT not tradeable on Rakuten Securities; IBB best available substitute
+              IBB vs IYT  dCAGR=+0.04%  sub-period CAGR+Sharpe winner in all 3 periods
 Momentum  : 210-day price ROC (~10 calendar months)
 Selection : top-3 ETFs by cross-sectional momentum rank
-Weighting : blend_70_30 — 70% equal + 30% inverse-volatility, renormalised.
-            Vol window = 63 trading days (≈3 calendar months).
+Weighting : blend_70_30 -- 70% equal + 30% inverse-volatility, renormalised.
+            Vol window = 63 trading days (~3 calendar months).
 Rebalance : bi-monthly (every 2 months, 2ME), executed next business day
-Hysteresis: entry_margin=0.02 — a new asset displaces the worst-ranked held asset
-            only when its 210-day ROC exceeds the displaced asset's ROC by ≥ 2 pp.
+Hysteresis: entry_margin=0.02 -- a new asset displaces the worst-ranked held asset
+            only when its 210-day ROC exceeds the displaced asset's ROC by >= 2 pp.
 Costs     : 20 bps total per side (10 bps commission + 10 bps slippage, default VbtRunConfig)
 Benchmark : SPY buy-and-hold
 
-IYT baseline (2010-2025, confirmed 2026-04-25):
-    Sharpe=1.162  CAGR=14.13%  MaxDD=20.12%
+IBB baseline (2010-2025, confirmed 2026-04-28):
+    Sharpe=1.117  CAGR=14.17%  MaxDD=20.51%
 
 Run
 ---

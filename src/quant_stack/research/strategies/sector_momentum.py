@@ -70,13 +70,16 @@ class HysteresisMode(StrEnum):
 # Universe history:
 #   2026-04-24: GDX replaced SPY (18-candidate study; GDX superior on all 3 metrics)
 #   2026-04-25: IYT replaced VNQ (10-candidate study; IYT: dSharpe=+0.063, dCAGR=+1.01%,
-#               dMaxDD=-1.41% — robust win on all three criteria)
+#               dMaxDD=-1.41% -- robust win on all three criteria)
+#   2026-04-28: IBB replaced IYT (9-candidate Rakuten-tradeable study; IYT not available
+#               on Rakuten Securities; IBB is best available substitute: CAGR=14.17% vs
+#               IYT=14.13%, consistent CAGR+Sharpe winner in all 3 sub-periods)
 #
 # IMPORTANT: asset order is significant.  relative_momentum_ranking_signal uses
 # method="first" for tie-breaking, so column order determines outcomes in ties.
-# IYT occupies index 0 (formerly VNQ's slot) — preserve this order in all studies.
+# IBB occupies index 0 (formerly IYT's slot) -- preserve this order in all studies.
 RISK_ON_UNIVERSE: list[str] = [
-    "IYT",  # Transportation (iShares) 
+    "IBB",  # Nasdaq Biotech (iShares) -- replaced IYT (not Rakuten-tradeable)
     "QQQ",  # Technology / Nasdaq
     "XLE",  # Energy
     "XLV",  # Health Care
