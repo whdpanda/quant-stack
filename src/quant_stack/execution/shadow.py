@@ -73,11 +73,14 @@ class ShadowExecutionService:
             )
         self.service = service
         self.shadow_dir = Path(shadow_dir)
+        self._run_count: int = 0  # tracks how many times run() has been called
 
     def run(
         self,
         target: TargetWeights,
         snapshot: PositionSnapshot,
+        weighting_method: str = "",
+        universe: list[str] | None = None,
     ) -> ShadowRunResult:
         """Run one shadow execution cycle and persist the full artifact set.
 
@@ -93,12 +96,17 @@ class ShadowExecutionService:
         8. Copy everything to shadow_artifacts/latest/
 
         Args:
-            target:   TargetWeights from the research layer.
-            snapshot: Current portfolio snapshot from positions loader or paper adapter.
+            target:           TargetWeights from the research layer.
+            snapshot:         Current portfolio snapshot.
+            weighting_method: Human-readable weighting scheme label for the summary.
+            universe:         Full candidate universe used by the strategy.
 
         Returns:
             ShadowRunResult with all artifact paths and a human-readable summary.
         """
+        self._run_count += 1
+        run_count = self._run_count
+
         ts = datetime.now()
         run_id = f"{ts.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
         run_dir = self.shadow_dir / run_id
@@ -117,8 +125,9 @@ class ShadowExecutionService:
         log_event(
             "shadow_run_started",
             run_id=run_id,
+            run_count=run_count,
             strategy=target.strategy_name,
-            rebalance_date=str(target.rebalance_date),
+            market_data_date=str(target.rebalance_date),
             nav=snapshot.nav,
             position_count=len(snapshot.positions),
         )
@@ -147,7 +156,7 @@ class ShadowExecutionService:
 
         # ── 3. target_weights_snapshot.json ───────────────────────────────
         tw_path = run_dir / "target_weights_snapshot.json"
-        tw_data = _build_target_weights_artifact(target)
+        tw_data = _build_target_weights_artifact(target, weighting_method, universe)
         tw_path.write_text(json.dumps(tw_data, indent=2), encoding="utf-8")
         artifacts["target_weights_snapshot"] = tw_path
         log_event("artifact_written", file="target_weights_snapshot.json")
@@ -166,7 +175,9 @@ class ShadowExecutionService:
 
         # ── 5. risk_check_result.json ──────────────────────────────────────
         risk_path = run_dir / "risk_check_result.json"
-        risk_data = _build_risk_check_artifact(result, plan, snapshot, target, self.service)
+        risk_data = _build_risk_check_artifact(
+            result, plan, snapshot, target, self.service, run_count
+        )
         risk_path.write_text(json.dumps(risk_data, indent=2), encoding="utf-8")
         artifacts["risk_check_result"] = risk_path
         log_event(
@@ -187,6 +198,8 @@ class ShadowExecutionService:
             risk_data=risk_data,
             needs_rebalance=needs_rebalance,
             ts=ts,
+            weighting_method=weighting_method,
+            universe=universe,
         )
         summary_path = run_dir / "shadow_execution_summary.md"
         summary_path.write_text(summary_text, encoding="utf-8")
@@ -246,13 +259,18 @@ def _build_positions_artifact(snapshot: PositionSnapshot) -> dict:
     }
 
 
-def _build_target_weights_artifact(target: TargetWeights) -> dict:
+def _build_target_weights_artifact(
+    target: TargetWeights,
+    weighting_method: str = "",
+    universe: list[str] | None = None,
+) -> dict:
     weight_sum = sum(target.weights.values())
-    return {
+    data: dict = {
         "strategy_name": target.strategy_name,
-        "rebalance_date": str(target.rebalance_date),
-        "generated_at": target.generated_at.isoformat(timespec="seconds"),
+        "market_data_date": str(target.rebalance_date),
         "source_record_id": target.source_record_id,
+        "weighting_method": weighting_method,
+        "universe": universe or [],
         "weights": {
             sym: round(w, 6)
             for sym, w in sorted(target.weights.items(), key=lambda x: -x[1])
@@ -260,6 +278,7 @@ def _build_target_weights_artifact(target: TargetWeights) -> dict:
         "weight_sum": round(weight_sum, 6),
         "implicit_cash_fraction": round(max(0.0, 1.0 - weight_sum), 6),
     }
+    return data
 
 
 def _build_rebalance_plan_artifact(
@@ -300,13 +319,16 @@ def _build_rebalance_plan_artifact(
     buy_count = sum(1 for o in plan.orders if str(o.side) == "buy")
     sell_count = len(plan.orders) - buy_count
     est_cost_usd = plan.total_turnover * plan.estimated_cost_bps / 10_000 * nav
+    buy_value = sum(o.delta_weight * nav for o in plan.orders if o.delta_weight > 0)
+    sell_value = sum(-o.delta_weight * nav for o in plan.orders if o.delta_weight < 0)
+    net_cash_needed = max(0.0, buy_value - sell_value) + est_cost_usd
 
     return {
         "run_id": run_id,
         "plan_id": plan.plan_id,
         "created_at": plan.created_at.isoformat(timespec="seconds"),
         "strategy_name": plan.decision.target.strategy_name,
-        "rebalance_date": str(plan.decision.target.rebalance_date),
+        "market_data_date": str(plan.decision.target.rebalance_date),
         "mode": result.adapter_mode,
         "dry_run": not plan.approved,
         "needs_rebalance": needs_rebalance,
@@ -317,8 +339,12 @@ def _build_rebalance_plan_artifact(
             "sell_count": sell_count,
             "hold_count": len(plan.decision.all_diffs) - len(plan.orders),
             "total_turnover": round(plan.total_turnover, 6),
+            "buy_value_usd": round(buy_value, 2),
+            "sell_proceeds_usd": round(sell_value, 2),
             "estimated_cost_bps": plan.estimated_cost_bps,
             "estimated_cost_usd": round(est_cost_usd, 2),
+            "net_cash_needed_usd": round(net_cash_needed, 2),
+            "available_cash_usd": round(snapshot.cash_fraction * nav, 2),
         },
         "orders": orders,
         "all_position_diffs": all_diffs,
@@ -333,8 +359,10 @@ def _build_risk_check_artifact(
     snapshot: PositionSnapshot,
     target: TargetWeights,
     service: RebalanceService,
+    run_count: int = 1,
 ) -> dict:
     checks: list[dict] = []
+    nav = snapshot.nav
 
     # 1. Kill switch
     ks_ok = not service.kill_switch
@@ -349,78 +377,128 @@ def _build_risk_check_artifact(
         ),
     })
 
-    # 2. Stale signal
-    age_days = (datetime.now() - target.generated_at).total_seconds() / 86400
-    stale_ok = age_days <= service.stale_signal_days
+    # 2. Stale market data — compare today against the last market close used for signals.
+    # target.rebalance_date is the last price bar date, not the time this object was created.
+    market_data_date = target.rebalance_date
+    market_data_age = (datetime.now().date() - market_data_date).days
+    stale_ok = market_data_age <= service.stale_signal_days
     checks.append({
         "check": "stale_signal",
         "severity": "warning",
         "passed": stale_ok,
-        "value_days": round(age_days, 2),
+        "market_data_date": str(market_data_date),
+        "market_data_age_days": market_data_age,
         "limit_days": service.stale_signal_days,
         "detail": (
-            f"Signal age {age_days:.1f}d <= {service.stale_signal_days}d limit"
+            f"Market data {market_data_age}d old (last close: {market_data_date}) -- within {service.stale_signal_days}d limit"
             if stale_ok
-            else f"WARNING: Signal age {age_days:.1f}d > {service.stale_signal_days}d -- verify freshness"
+            else f"WARNING: Market data {market_data_age}d old (last close: {market_data_date}) -- exceeds {service.stale_signal_days}d limit, verify signal is still current"
         ),
     })
 
-    # 3. Position reconciliation
+    # 3. Position reconciliation — two-sided: total should be in [90%, 105%].
+    # Under 90% may indicate untracked positions; over 105% is likely an accounting error.
     total_alloc = sum(snapshot.positions.values())
     implied_total = total_alloc + snapshot.cash_fraction
-    recon_ok = implied_total <= 1.05
+    if implied_total > 1.05:
+        recon_ok = False
+        detail = (
+            f"WARNING: positions ({total_alloc:.2%}) + cash ({snapshot.cash_fraction:.2%})"
+            f" = {implied_total:.2%} > 105% -- possible double-counting or accounting error"
+        )
+    elif implied_total < 0.90:
+        recon_ok = False
+        detail = (
+            f"WARNING: positions ({total_alloc:.2%}) + cash ({snapshot.cash_fraction:.2%})"
+            f" = {implied_total:.2%} < 90% -- verify all holdings are accounted for"
+        )
+    else:
+        recon_ok = True
+        detail = (
+            f"positions ({total_alloc:.2%}) + cash ({snapshot.cash_fraction:.2%})"
+            f" = {implied_total:.2%} (within normal range)"
+        )
     checks.append({
         "check": "position_reconciliation",
         "severity": "warning",
         "passed": recon_ok,
         "value": round(implied_total, 6),
-        "limit": 1.05,
-        "detail": (
-            f"positions ({total_alloc:.2%}) + cash ({snapshot.cash_fraction:.2%}) = {implied_total:.2%} <= 105%"
-            if recon_ok
-            else f"WARNING: positions + cash = {implied_total:.2%} > 105% -- possible accounting error"
-        ),
+        "detail": detail,
     })
 
-    # 4. Cash buffer
-    est_fee = plan.total_turnover * service.cost_bps / 10_000
-    cash_ok = plan.total_turnover == 0 or snapshot.cash_fraction >= est_fee
+    # 4. Cash sufficiency — compare (net buy notional + estimated fee) to available cash.
+    # Sells generate cash that can fund buys; fees are an additional cash outflow.
+    if plan.total_turnover == 0:
+        cash_ok = True
+        cash_detail = "No orders -- cash check not applicable"
+    else:
+        buy_value = sum(o.delta_weight * nav for o in plan.orders if o.delta_weight > 0)
+        sell_value = sum(-o.delta_weight * nav for o in plan.orders if o.delta_weight < 0)
+        est_cost_usd = plan.total_turnover * service.cost_bps / 10_000 * nav
+        available_cash = snapshot.cash_fraction * nav
+        net_cash_needed = max(0.0, buy_value - sell_value) + est_cost_usd
+        cash_ok = net_cash_needed <= available_cash + 0.50  # $0.50 rounding tolerance
+
+        sell_note = f" - sell proceeds ${sell_value:,.0f}" if sell_value > 0 else ""
+        if cash_ok:
+            cash_detail = (
+                f"Cash sufficient: buy ${buy_value:,.0f}{sell_note} + fee ${est_cost_usd:,.0f}"
+                f" = net ${net_cash_needed:,.0f} vs available ${available_cash:,.0f}"
+            )
+        else:
+            shortage = net_cash_needed - available_cash
+            cash_detail = (
+                f"WARNING: need ${net_cash_needed:,.0f}"
+                f" (buy ${buy_value:,.0f}{sell_note} + fee ${est_cost_usd:,.0f})"
+                f" but only ${available_cash:,.0f} available -- short by ${shortage:,.0f}"
+            )
+
     checks.append({
-        "check": "cash_buffer",
+        "check": "cash_sufficiency",
         "severity": "warning",
         "passed": cash_ok,
-        "cash_fraction": round(snapshot.cash_fraction, 6),
-        "fee_estimate_fraction": round(est_fee, 6),
-        "detail": (
-            f"cash {snapshot.cash_fraction:.3%} >= fee estimate {est_fee:.3%}"
-            if cash_ok
-            else f"WARNING: cash {snapshot.cash_fraction:.3%} < fee estimate {est_fee:.3%} -- consider adding a cash buffer"
-        ),
+        "detail": cash_detail,
     })
 
-    # 5. Duplicate execution guard
+    # 5. Duplicate execution guard.
+    # In dry_run mode the service never updates its fingerprint, so dup_skipped is always
+    # False.  We use run_count to distinguish first vs subsequent shadow runs.
     dup_skipped = any("[DUPLICATE]" in e for e in result.log_entries)
+    if dup_skipped:
+        dup_detail = "SKIPPED: Same plan as last execution -- no changes detected"
+    elif run_count == 1:
+        dup_detail = "No duplicate -- no prior shadow run found (first run for this session)"
+    else:
+        dup_detail = "No duplicate -- plan fingerprint differs from previous shadow run"
     checks.append({
         "check": "duplicate_guard",
         "severity": "info",
         "passed": not dup_skipped,
-        "detail": (
-            "No duplicate -- plan fingerprint differs from last execution"
-            if not dup_skipped
-            else "SKIPPED: Same fingerprint as last execution -- no rebalance needed"
-        ),
+        "detail": dup_detail,
     })
 
-    # 6. Minimum order threshold
+    # 6. Minimum order threshold — result-oriented.
+    filtered_count = len(plan.decision.all_diffs) - len(plan.decision.actionable)
+    if filtered_count == 0:
+        mot_detail = (
+            f"All diffs are at or above the {service.min_trade_size:.1%} minimum threshold"
+            f" -- no trades filtered"
+        )
+    else:
+        mot_detail = (
+            f"{filtered_count} sub-threshold diff(s) below {service.min_trade_size:.1%} filtered;"
+            f" {len(plan.decision.actionable)} actionable trade(s) remain"
+        )
     checks.append({
         "check": "min_order_threshold",
         "severity": "info",
         "passed": True,
         "threshold": service.min_trade_size,
-        "detail": f"Diffs < {service.min_trade_size:.1%} filtered automatically (reduces noise trading)",
+        "filtered_count": filtered_count,
+        "detail": mot_detail,
     })
 
-    # 7–9. Hard risk checks from RiskCheckResult
+    # 7-9. Hard risk checks from RiskCheckResult (max_position_size, max_turnover, max_orders).
     if result.risk_check:
         violation_rules = {v.rule for v in result.risk_check.violations}
 
@@ -487,11 +565,18 @@ def _build_summary_markdown(
     risk_data: dict,
     needs_rebalance: bool,
     ts: datetime,
+    weighting_method: str = "",
+    universe: list[str] | None = None,
 ) -> str:
     nav = snapshot.nav
     buy_orders = [o for o in plan.orders if str(o.side) == "buy"]
     sell_orders = [o for o in plan.orders if str(o.side) == "sell"]
+    weight_sum = sum(target.weights.values())
     est_cost = plan.total_turnover * plan.estimated_cost_bps / 10_000 * nav
+
+    # Market data date and age for display (P3)
+    market_data_date = target.rebalance_date
+    market_data_age_days = (ts.date() - market_data_date).days
 
     if not result.success:
         recommendation = "BLOCKED -- execution blocked (kill switch or risk violation). Review risk checks."
@@ -503,6 +588,7 @@ def _build_summary_markdown(
         recommendation = f"Rebalance recommended -- {len(plan.orders)} order(s) to execute."
         action = "Review the order plan, then execute manually at your broker if approved."
 
+    # ── Section A: Basic Information ──────────────────────────────────────────
     L: list[str] = [
         "# Shadow Execution Summary",
         "",
@@ -511,12 +597,24 @@ def _build_summary_markdown(
         "| Field | Value |",
         "|-------|-------|",
         f"| Strategy | `{target.strategy_name}` |",
-        f"| Rebalance Date | {target.rebalance_date} |",
-        f"| Signal Generated At | {target.generated_at.strftime('%Y-%m-%d %H:%M:%S')} |",
-        f"| Shadow Run ID | `{run_id}` |",
+    ]
+
+    if weighting_method:
+        L.append(f"| Weighting Method | {weighting_method} |")
+
+    if universe:
+        L.append(f"| Universe | {', '.join(universe)} |")
+
+    L += [
+        f"| Market Data Date | {market_data_date} ({market_data_age_days} calendar day(s) ago) |",
         f"| Run At | {ts.strftime('%Y-%m-%d %H:%M:%S')} |",
+        f"| Shadow Run ID | `{run_id}` |",
         f"| Current NAV | ${nav:,.2f} |",
         f"| Execution Mode | `{result.adapter_mode}` (dry-run, no orders submitted) |",
+    ]
+
+    # ── Section B: Current Positions ──────────────────────────────────────────
+    L += [
         "",
         "## B. Current Positions",
         "",
@@ -542,19 +640,24 @@ def _build_summary_markdown(
             "_Portfolio is all-cash (first rebalance)._",
         ]
 
+    # ── Section C: Target Positions ───────────────────────────────────────────
     L += [
         "",
         "## C. Target Positions",
+        "",
+        f"_Theoretical target weights (sum = {weight_sum:.2%} of NAV)._",
+        "_See Section D for the cash/cost note before placing orders._",
         "",
         "| Symbol | Weight | Value (USD) |",
         "|--------|--------|-------------|",
     ]
     for sym, w in sorted(target.weights.items(), key=lambda x: -x[1]):
         L.append(f"| {sym} | {w:.2%} | ${w * nav:,.0f} |")
-    implicit_cash = max(0.0, 1.0 - sum(target.weights.values()))
+    implicit_cash = max(0.0, 1.0 - weight_sum)
     if implicit_cash > 0.001:
         L.append(f"| CASH (implicit buffer) | {implicit_cash:.2%} | ${implicit_cash * nav:,.0f} |")
 
+    # ── Section D: Rebalance Plan ─────────────────────────────────────────────
     L += [
         "",
         "## D. Rebalance Plan",
@@ -562,10 +665,10 @@ def _build_summary_markdown(
     ]
 
     if not plan.orders:
-        L.append(
+        L += [
             "_No orders required. All position diffs are below the minimum trade "
-            f"threshold ({plan.estimated_cost_bps:.0f} bps)._"
-        )
+            f"threshold ({plan.estimated_cost_bps:.0f} bps / {self_min_trade_size_display(plan)})._",
+        ]
     else:
         L += [
             "| Symbol | Action | Current | Target | Delta | Delta $ |",
@@ -579,13 +682,40 @@ def _build_summary_markdown(
                 f"| {cur:.2%} | {o.target_weight:.2%} "
                 f"| {o.delta_weight:+.2%} | ${delta_usd:+,.0f} |"
             )
+
+        # Turnover and cost
+        buy_value = sum(o.delta_weight * nav for o in plan.orders if o.delta_weight > 0)
+        sell_value = sum(-o.delta_weight * nav for o in plan.orders if o.delta_weight < 0)
+        net_cash_needed = max(0.0, buy_value - sell_value) + est_cost
+        available_cash = snapshot.cash_fraction * nav
+
         L += [
             "",
             f"**Total Turnover:** {plan.total_turnover:.2%}  ",
-            f"**Estimated Cost:** ~${est_cost:,.0f} "
-            f"({plan.estimated_cost_bps:.0f} bps of NAV)",
+            f"**Estimated Cost:** ~${est_cost:,.0f} ({plan.estimated_cost_bps:.0f} bps of NAV)",
         ]
 
+        # P1: cash/cost note — clarify that target weights are theoretical
+        L += [""]
+        if net_cash_needed > available_cash + 0.50:
+            shortage = net_cash_needed - available_cash
+            L += [
+                "> **Cash note:** Target weights above assume full NAV deployment.",
+                f"> Net cash needed to execute: **${net_cash_needed:,.0f}**"
+                + (f" (buy ${buy_value:,.0f} - sell ${sell_value:,.0f} + fee ${est_cost:,.0f})" if sell_value > 0 else f" (buy ${buy_value:,.0f} + fee ${est_cost:,.0f})"),
+                f"> Available cash: **${available_cash:,.0f}**  ",
+                f"> **Short by ~${shortage:,.0f}.** Before executing, ensure your account has",
+                f"> sufficient buying power, or scale down order sizes proportionally.",
+            ]
+        else:
+            L += [
+                "> **Cash note:** Net cash needed to execute:"
+                f" **${net_cash_needed:,.0f}**"
+                + (f" (buy ${buy_value:,.0f} - sell ${sell_value:,.0f} + fee ${est_cost:,.0f})" if sell_value > 0 else f" (buy ${buy_value:,.0f} + fee ${est_cost:,.0f})")
+                + f" vs available ${available_cash:,.0f} -- sufficient.",
+            ]
+
+    # ── Section E: Risk Checks ────────────────────────────────────────────────
     L += [
         "",
         "## E. Risk Check Results",
@@ -606,15 +736,18 @@ def _build_summary_markdown(
 
     if risk_data["all_passed"]:
         overall = "**All checks passed.**"
+        if risk_data["warnings"]:
+            overall += f" ({len(risk_data['warnings'])} warning(s): `{'`, `'.join(risk_data['warnings'])}`)"
     else:
         parts = []
         if risk_data["violations"]:
             parts.append(f"{len(risk_data['violations'])} violation(s): `{'`, `'.join(risk_data['violations'])}`")
         if risk_data["warnings"]:
             parts.append(f"{len(risk_data['warnings'])} warning(s): `{'`, `'.join(risk_data['warnings'])}`")
-        overall = f"**Issues found — {'; '.join(parts)}**"
+        overall = f"**Issues found -- {'; '.join(parts)}**"
     L += ["", f"Overall: {overall}"]
 
+    # ── Section F: Human Review Summary ──────────────────────────────────────
     L += [
         "",
         "## F. Human Review Summary",
@@ -647,14 +780,15 @@ def _build_summary_markdown(
         ]
     elif not needs_rebalance:
         L += [
-            "Current portfolio matches the target allocation (all diffs below the minimum "
-            "trade threshold). No action required this cycle.",
+            "Current portfolio matches the target allocation"
+            f" (all diffs below the {self_min_trade_size_display(plan)} minimum threshold).",
+            "No action required this cycle.",
             "",
         ]
     else:
         L += [
             "> This is a **dry-run**. No orders have been or will be submitted automatically.",
-            "> Review the plan in Section D, then place orders manually at your broker.",
+            "> Review the plan in Section D, confirm the cash note, then place orders manually at your broker.",
             "",
         ]
 
@@ -666,3 +800,10 @@ def _build_summary_markdown(
     ]
 
     return "\n".join(L)
+
+
+def self_min_trade_size_display(plan: OrderPlan) -> str:
+    """Return a human-readable min trade size string from the plan context."""
+    if not plan.orders:
+        return "0.5%"
+    return f"{min(abs(o.delta_weight) for o in plan.decision.actionable):.1%}" if plan.decision.actionable else "0.5%"

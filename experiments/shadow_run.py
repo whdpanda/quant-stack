@@ -72,6 +72,7 @@ STRATEGY_NAME = "sector_momentum_210d_top3"
 MOMENTUM_WINDOW = 210
 TOP_N = 3
 VOL_WINDOW = 63
+WEIGHTING_METHOD_DISPLAY = "BLEND_70_30 (70% equal + 30% inverse-vol)"
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 POSITIONS_DEFAULT = Path("data/current_positions.json")
@@ -310,7 +311,12 @@ def main() -> None:
         artifacts_dir=str(EXECUTION_ARTIFACTS_DIR),
     )
     shadow_svc = ShadowExecutionService(service=service, shadow_dir=SHADOW_DIR)
-    shadow_result = shadow_svc.run(target, snapshot)
+    shadow_result = shadow_svc.run(
+        target,
+        snapshot,
+        weighting_method=WEIGHTING_METHOD_DISPLAY,
+        universe=RISK_ON_UNIVERSE,
+    )
 
     plan = shadow_result.plan
     result = shadow_result.result
