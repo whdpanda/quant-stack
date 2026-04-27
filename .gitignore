@@ -27,3 +27,5 @@ experiments/registry.json
 # Execution runtime artifacts
 execution_artifacts/
 lean_output/
+# Shadow execution artifacts
+shadow_artifacts/
