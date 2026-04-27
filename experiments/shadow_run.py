@@ -73,6 +73,7 @@ MOMENTUM_WINDOW = 210
 TOP_N = 3
 VOL_WINDOW = 63
 WEIGHTING_METHOD_DISPLAY = "BLEND_70_30 (70% equal + 30% inverse-vol)"
+UNIVERSE_TYPE_DISPLAY = "Sector / industry / thematic ETFs"
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 POSITIONS_DEFAULT = Path("data/current_positions.json")
@@ -316,6 +317,7 @@ def main() -> None:
         snapshot,
         weighting_method=WEIGHTING_METHOD_DISPLAY,
         universe=RISK_ON_UNIVERSE,
+        universe_type=UNIVERSE_TYPE_DISPLAY,
     )
 
     plan = shadow_result.plan

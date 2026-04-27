@@ -81,6 +81,7 @@ class ShadowExecutionService:
         snapshot: PositionSnapshot,
         weighting_method: str = "",
         universe: list[str] | None = None,
+        universe_type: str = "",
     ) -> ShadowRunResult:
         """Run one shadow execution cycle and persist the full artifact set.
 
@@ -200,6 +201,7 @@ class ShadowExecutionService:
             ts=ts,
             weighting_method=weighting_method,
             universe=universe,
+            universe_type=universe_type,
         )
         summary_path = run_dir / "shadow_execution_summary.md"
         summary_path.write_text(summary_text, encoding="utf-8")
@@ -567,6 +569,7 @@ def _build_summary_markdown(
     ts: datetime,
     weighting_method: str = "",
     universe: list[str] | None = None,
+    universe_type: str = "",
 ) -> str:
     nav = snapshot.nav
     buy_orders = [o for o in plan.orders if str(o.side) == "buy"]
@@ -578,12 +581,23 @@ def _build_summary_markdown(
     market_data_date = target.rebalance_date
     market_data_age_days = (ts.date() - market_data_date).days
 
+    has_cash_warning = "cash_sufficiency" in risk_data.get("warnings", [])
+
     if not result.success:
         recommendation = "BLOCKED -- execution blocked (kill switch or risk violation). Review risk checks."
         action = "**Do NOT execute** until violations are resolved."
     elif not needs_rebalance:
         recommendation = "No rebalance required -- portfolio already matches target allocation."
         action = "No action needed this cycle."
+    elif has_cash_warning:
+        recommendation = (
+            f"Rebalance recommended -- {len(plan.orders)} order(s) to execute, "
+            "subject to resolving the cash shortfall noted in Section D."
+        )
+        action = (
+            "Verify your account has sufficient buying power (see Section D cash note) "
+            "before placing orders, then execute manually at your broker."
+        )
     else:
         recommendation = f"Rebalance recommended -- {len(plan.orders)} order(s) to execute."
         action = "Review the order plan, then execute manually at your broker if approved."
@@ -603,7 +617,9 @@ def _build_summary_markdown(
         L.append(f"| Weighting Method | {weighting_method} |")
 
     if universe:
-        L.append(f"| Universe | {', '.join(universe)} |")
+        if universe_type:
+            L.append(f"| Universe Type | {universe_type} |")
+        L.append(f"| Universe Members | {', '.join(universe)} |")
 
     L += [
         f"| Market Data Date | {market_data_date} ({market_data_age_days} calendar day(s) ago) |",
@@ -734,17 +750,21 @@ def _build_summary_markdown(
             status = "INFO"
         L.append(f"| `{check['check']}` | {status} | {check['detail']} |")
 
-    if risk_data["all_passed"]:
-        overall = "**All checks passed.**"
-        if risk_data["warnings"]:
-            overall += f" ({len(risk_data['warnings'])} warning(s): `{'`, `'.join(risk_data['warnings'])}`)"
-    else:
+    if not risk_data["all_passed"]:
         parts = []
         if risk_data["violations"]:
             parts.append(f"{len(risk_data['violations'])} violation(s): `{'`, `'.join(risk_data['violations'])}`")
         if risk_data["warnings"]:
             parts.append(f"{len(risk_data['warnings'])} warning(s): `{'`, `'.join(risk_data['warnings'])}`")
-        overall = f"**Issues found -- {'; '.join(parts)}**"
+        overall = f"**FAILED -- {'; '.join(parts)}**"
+    elif risk_data["warnings"]:
+        overall = (
+            f"**PASSED WITH WARNINGS** -- "
+            f"{len(risk_data['warnings'])} warning(s) require manual review: "
+            f"`{'`, `'.join(risk_data['warnings'])}`"
+        )
+    else:
+        overall = "**All checks passed.**"
     L += ["", f"Overall: {overall}"]
 
     # ── Section F: Human Review Summary ──────────────────────────────────────
