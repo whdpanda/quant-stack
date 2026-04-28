@@ -48,6 +48,7 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 from loguru import logger
 
 # ── Imports from quant_stack ───────────────────────────────────────────────────
