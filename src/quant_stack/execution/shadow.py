@@ -224,7 +224,17 @@ class ShadowExecutionService:
         artifacts["shadow_execution_summary"] = summary_path
         log_event("artifact_written", file="shadow_execution_summary.md")
 
-        # ── 7. execution_log.jsonl ─────────────────────────────────────────
+        # ── 7. manual_execution_log_template.json ────────────────────────
+        if plan.orders:
+            tpl_path = run_dir / "manual_execution_log_template.json"
+            tpl_data = _build_execution_log_template(
+                target, snapshot, plan, run_id, ts, latest_prices
+            )
+            tpl_path.write_text(json.dumps(tpl_data, indent=2), encoding="utf-8")
+            artifacts["manual_execution_log_template"] = tpl_path
+            log_event("artifact_written", file="manual_execution_log_template.json")
+
+        # ── 8. execution_log.jsonl ─────────────────────────────────────────
         log_event(
             "shadow_run_completed",
             run_id=run_id,
@@ -764,48 +774,52 @@ def _build_summary_markdown(
             f"| **Tradeable NAV** | **${tradeable_nav:,.2f}** |",
         ]
 
-        # ── Enhancement 2: D.2 Human Execution Suggestion ─────────────────────
+        # ── D.2 Human Execution Suggestion ─────────────────────────────────────
         buy_orders_sorted = sorted(
             [o for o in plan.orders if o.delta_weight > 0], key=lambda x: x.symbol
         )
         sell_orders_sorted = sorted(
             [o for o in plan.orders if o.delta_weight < 0], key=lambda x: x.symbol
         )
+        has_prices = latest_prices is not None and any(
+            o.symbol in latest_prices for o in plan.orders
+        )
+        buy_scale = tradeable_nav / buy_value if buy_value > 0 else 1.0
+
+        L += [
+            "",
+            "**D.2 Human Execution Suggestion** "
+            "_(manual trading aid only -- not formal strategy output)_",
+            "",
+            "**Three-tier price framework:**",
+            "",
+            "| Price Type | Definition | How to use |",
+            "|------------|------------|------------|",
+            f"| Planning Reference Price | Last US market close ({market_data_date}) | Notional and qty estimates below only |",
+            "| Real-time Execution Price | Price shown at your broker at order submission | Use this to derive final share qty |",
+            "| Actual Fill Price | Price your order actually filled at | Record in execution log template (see Section G) |",
+            "",
+            "> **Notional-first execution rule:** Target `Suggested Notional` as your order size.",
+            "> At your broker, read the live ask (buy) or bid (sell) price, then compute:",
+            "> `executable qty = floor(Suggested Notional / real-time price)`.",
+            "> Do NOT mechanically submit the `Est. Qty` column -- it is a planning estimate",
+            "> based on yesterday's close and will be wrong if the price has moved.",
+        ]
 
         if buy_orders_sorted:
-            # Scale buy notionals proportionally to tradeable_nav
-            if buy_value > 0:
-                scale = tradeable_nav / buy_value if buy_value > 0 else 1.0
-            else:
-                scale = 1.0
-
-            has_prices = latest_prices is not None and any(
-                o.symbol in latest_prices for o in buy_orders_sorted
-            )
-
-            L += [
-                "",
-                "**D.2 Human Execution Suggestion** "
-                "_(manual trading aid only -- not formal strategy output)_",
-                "",
-            ]
-
             if has_prices:
                 L += [
-                    f"_Reference prices from US market close on {market_data_date}._",
-                    "_Quantities floor-rounded to whole shares. Verify prices at your broker before placing orders._",
                     "",
-                    "| Symbol | Action | Suggested Notional* | Ref Price | Suggested Qty | Residual Cash |",
-                    "|--------|--------|--------------------:|----------:|--------------:|--------------:|",
+                    f"| Symbol | Action | Suggested Notional* | Planning Ref Price | Est. Qty (plan only) | Est. Residual |",
+                    f"|--------|--------|--------------------:|-------------------:|---------------------:|--------------:|",
                 ]
                 total_residual = 0.0
                 for o in buy_orders_sorted:
-                    sug_notional = o.delta_weight * nav * scale
-                    price = latest_prices.get(o.symbol)
+                    sug_notional = o.delta_weight * nav * buy_scale
+                    price = latest_prices.get(o.symbol) if latest_prices else None
                     if price and price > 0:
                         qty = math.floor(sug_notional / price)
-                        filled = qty * price
-                        residual = sug_notional - filled
+                        residual = sug_notional - qty * price
                         total_residual += residual
                         L.append(
                             f"| {o.symbol} | BUY | ${sug_notional:,.0f} "
@@ -817,32 +831,36 @@ def _build_summary_markdown(
                             f"| N/A | N/A | N/A |"
                         )
                 L.append(
-                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})._"
-                    f"  \n_Total residual cash from rounding: ~${total_residual:,.2f}._"
+                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})."
+                    f" Est. residual from floor-rounding at ref price: ~${total_residual:,.2f}._"
                 )
             else:
                 L += [
-                    "_Reference prices not available -- showing notional amounts only._",
                     "",
                     "| Symbol | Action | Suggested Notional* |",
                     "|--------|--------|--------------------:|",
                 ]
                 for o in buy_orders_sorted:
-                    sug_notional = o.delta_weight * nav * scale
+                    sug_notional = o.delta_weight * nav * buy_scale
                     L.append(f"| {o.symbol} | BUY | ${sug_notional:,.0f} |")
                 L.append(
-                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})._"
+                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})."
+                    " Reference prices unavailable -- calculate qty at your broker using real-time price._"
                 )
 
         if sell_orders_sorted:
             L += [
                 "",
-                "| Symbol | Action | Sell Notional (at target weight) |",
-                "|--------|--------|--------------------------------:|",
+                "| Symbol | Action | Sell Notional (planning est.) | Planning Ref Price |",
+                "|--------|--------|------------------------------:|-------------------:|",
             ]
             for o in sell_orders_sorted:
                 sell_notional = abs(o.delta_weight) * nav
-                L.append(f"| {o.symbol} | SELL | ${sell_notional:,.0f} |")
+                price = latest_prices.get(o.symbol) if latest_prices else None
+                price_str = f"${price:,.2f}" if price else "N/A"
+                L.append(
+                    f"| {o.symbol} | SELL | ${sell_notional:,.0f} | {price_str} |"
+                )
 
     # ── Section E: Risk Checks ────────────────────────────────────────────────
     L += [
@@ -925,7 +943,91 @@ def _build_summary_markdown(
             "",
         ]
 
+    # ── Section G: Human Execution Rules ──────────────────────────────────────
     L += [
+        "",
+        "## G. Human Execution Rules",
+        "",
+        "_These rules are manual execution guidelines only._"
+        " _They do not modify target weights, order sizing, or strategy logic._",
+        "",
+        "### G.1 Price Deviation Handling",
+        "",
+        "Before placing each order, compare the **real-time price** at your broker"
+        " to the **Planning Reference Price** in Section D.2."
+        " Apply the rule for the matching deviation band:",
+        "",
+        "**BUY orders** -- deviation = `(real_time / ref_price) - 1`",
+        "",
+        "| Deviation | Rule |",
+        "|-----------|------|",
+        "| <= +1% | **PROCEED** -- execute at real-time price |",
+        "| +1% to +2% | **REVIEW** -- price has moved up; decide whether to proceed or reduce size |",
+        "| > +2% | **DEFER** -- exceeds acceptable deviation; wait or skip this cycle |",
+        "",
+        "**SELL orders** -- deviation = `(real_time / ref_price) - 1`",
+        "",
+        "| Deviation | Rule |",
+        "|-----------|------|",
+        "| >= -1% | **PROCEED** -- execute at real-time price |",
+        "| -1% to -2% | **REVIEW** -- price has dropped; decide whether to proceed |",
+        "| < -2% | **DEFER** -- exceeds acceptable deviation; wait or skip this cycle |",
+    ]
+
+    # Per-order deviation threshold table (only when prices are available)
+    orders_with_prices = [
+        o for o in plan.orders
+        if latest_prices and latest_prices.get(o.symbol)
+    ]
+    if orders_with_prices:
+        L += [
+            "",
+            "### G.2 Per-Order Deviation Limits",
+            "",
+            "| Symbol | Action | Planning Ref | PROCEED if | REVIEW if | DEFER if |",
+            "|--------|--------|-------------:|-----------:|----------:|---------:|",
+        ]
+        for o in sorted(orders_with_prices, key=lambda x: x.symbol):
+            ref = latest_prices[o.symbol]  # type: ignore[index]
+            side = str(o.side)
+            if side == "buy":
+                proceed = f"<= ${ref * 1.01:,.2f}"
+                review  = f"${ref * 1.01:,.2f} -- ${ref * 1.02:,.2f}"
+                defer   = f"> ${ref * 1.02:,.2f}"
+            else:
+                proceed = f">= ${ref * 0.99:,.2f}"
+                review  = f"${ref * 0.98:,.2f} -- ${ref * 0.99:,.2f}"
+                defer   = f"< ${ref * 0.98:,.2f}"
+            L.append(
+                f"| {o.symbol} | {side.upper()} | ${ref:,.2f}"
+                f" | {proceed} | {review} | {defer} |"
+            )
+
+    L += [
+        "",
+        "### G.3 Execution Checklist",
+        "",
+        "1. Confirm all risk checks in Section E have passed (no FAIL).",
+        "2. For each order: check the real-time price vs Planning Ref Price (G.2).",
+        "3. If PROCEED: enter `floor(Suggested Notional / real-time price)` shares.",
+        "4. If REVIEW: use judgment; document reasoning in execution log.",
+        "5. If DEFER: skip this order; document in execution log.",
+        "6. After all orders: fill in `manual_execution_log_template.json`"
+        f" in the run artifact directory.",
+        "",
+        "### G.4 Actual Fill Price Recording",
+        "",
+        "After execution, open the template and save your fills:",
+        "",
+        f"    {run_id}/manual_execution_log_template.json",
+        "",
+        "Fields to complete: `real_time_quote_seen`, `actual_fill_price`,"
+        " `actual_quantity`, `actual_notional_usd`, `execution_time`,"
+        " `deviation_from_ref_pct`, `rule_applied`, `notes`.",
+    ]
+
+    L += [
+        "",
         "---",
         "",
         f"*Generated by quant-stack shadow execution | {ts.strftime('%Y-%m-%d %H:%M:%S')}*  ",
@@ -940,3 +1042,54 @@ def self_min_trade_size_display(plan: OrderPlan) -> str:
     if not plan.orders:
         return "0.5%"
     return f"{min(abs(o.delta_weight) for o in plan.decision.actionable):.1%}" if plan.decision.actionable else "0.5%"
+
+
+def _build_execution_log_template(
+    target: TargetWeights,
+    snapshot: PositionSnapshot,
+    plan: OrderPlan,
+    run_id: str,
+    ts: datetime,
+    latest_prices: dict[str, float] | None = None,
+) -> dict:
+    """Build a fill-in-the-blank template for recording actual manual fills."""
+    entries = []
+    for o in sorted(plan.orders, key=lambda x: x.symbol):
+        ref_price = (latest_prices or {}).get(o.symbol)
+        planned_notional = round(abs(o.delta_weight) * snapshot.nav, 2)
+        entries.append({
+            "symbol": o.symbol,
+            "action": str(o.side).upper(),
+            "planning_ref_price": round(ref_price, 4) if ref_price else None,
+            "planned_notional_usd": planned_notional,
+            "planned_delta_weight": round(o.delta_weight, 6),
+            # ── Fill in after execution ──────────────────────────────────────
+            "real_time_quote_seen": None,
+            "actual_fill_price": None,
+            "actual_quantity": None,
+            "actual_notional_usd": None,
+            "execution_time": None,
+            "deviation_from_ref_pct": None,
+            "rule_applied": None,
+            "notes": None,
+        })
+
+    return {
+        "_instructions": [
+            "Fill in every null field after manual execution.",
+            "Save a completed copy as 'manual_execution_log.json' in this directory.",
+            "real_time_quote_seen  : price you observed at your broker before submitting",
+            "actual_fill_price     : price your order filled at (from broker confirmation)",
+            "actual_quantity       : whole shares actually bought or sold",
+            "actual_notional_usd   : actual_fill_price x actual_quantity",
+            "deviation_from_ref_pct: (actual_fill_price / planning_ref_price - 1) * 100",
+            "rule_applied          : PROCEED / REVIEW / DEFER (per Section G of summary)",
+            "notes                 : any context (market conditions, partial fills, etc.)",
+        ],
+        "strategy_name": target.strategy_name,
+        "signal_date": str(target.rebalance_date),
+        "run_id": run_id,
+        "run_at": ts.isoformat(timespec="seconds"),
+        "nav": snapshot.nav,
+        "orders": entries,
+    }
