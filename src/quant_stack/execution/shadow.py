@@ -15,10 +15,11 @@ No orders are ever submitted. dry_run=True is enforced on construction.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,19 @@ class ShadowRunResult:
     artifacts: dict[str, Path] = field(default_factory=dict)
     summary_text: str = ""
     needs_rebalance: bool = False
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _count_bdays(start: date, end: date) -> int:
+    """Count Mon-Fri business days elapsed between start (exclusive) and end (inclusive)."""
+    count = 0
+    d = start
+    while d < end:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            count += 1
+    return count
 
 
 # ── Service ───────────────────────────────────────────────────────────────────
@@ -82,6 +96,7 @@ class ShadowExecutionService:
         weighting_method: str = "",
         universe: list[str] | None = None,
         universe_type: str = "",
+        latest_prices: dict[str, float] | None = None,
     ) -> ShadowRunResult:
         """Run one shadow execution cycle and persist the full artifact set.
 
@@ -202,6 +217,7 @@ class ShadowExecutionService:
             weighting_method=weighting_method,
             universe=universe,
             universe_type=universe_type,
+            latest_prices=latest_prices,
         )
         summary_path = run_dir / "shadow_execution_summary.md"
         summary_path.write_text(summary_text, encoding="utf-8")
@@ -570,6 +586,7 @@ def _build_summary_markdown(
     weighting_method: str = "",
     universe: list[str] | None = None,
     universe_type: str = "",
+    latest_prices: dict[str, float] | None = None,
 ) -> str:
     nav = snapshot.nav
     buy_orders = [o for o in plan.orders if str(o.side) == "buy"]
@@ -577,9 +594,10 @@ def _build_summary_markdown(
     weight_sum = sum(target.weights.values())
     est_cost = plan.total_turnover * plan.estimated_cost_bps / 10_000 * nav
 
-    # Market data date and age for display (P3)
+    # Enhancement 1: time fields
     market_data_date = target.rebalance_date
-    market_data_age_days = (ts.date() - market_data_date).days
+    calendar_age = (ts.date() - market_data_date).days
+    trading_age = _count_bdays(market_data_date, ts.date())
 
     has_cash_warning = "cash_sufficiency" in risk_data.get("warnings", [])
 
@@ -621,9 +639,11 @@ def _build_summary_markdown(
             L.append(f"| Universe Type | {universe_type} |")
         L.append(f"| Universe Members | {', '.join(universe)} |")
 
+    age_str = f"{trading_age} trading day(s) / {calendar_age} calendar day(s)"
     L += [
-        f"| Market Data Date | {market_data_date} ({market_data_age_days} calendar day(s) ago) |",
-        f"| Run At | {ts.strftime('%Y-%m-%d %H:%M:%S')} |",
+        f"| US Market Close Date | {market_data_date} |",
+        f"| Market Data Age | {age_str} |",
+        f"| Run At (Local Time) | {ts.strftime('%Y-%m-%d %H:%M:%S')} |",
         f"| Shadow Run ID | `{run_id}` |",
         f"| Current NAV | ${nav:,.2f} |",
         f"| Execution Mode | `{result.adapter_mode}` (dry-run, no orders submitted) |",
@@ -711,7 +731,7 @@ def _build_summary_markdown(
             f"**Estimated Cost:** ~${est_cost:,.0f} ({plan.estimated_cost_bps:.0f} bps of NAV)",
         ]
 
-        # P1: cash/cost note — clarify that target weights are theoretical
+        # Cash note blockquote (existing logic, unchanged)
         L += [""]
         if net_cash_needed > available_cash + 0.50:
             shortage = net_cash_needed - available_cash
@@ -730,6 +750,99 @@ def _build_summary_markdown(
                 + (f" (buy ${buy_value:,.0f} - sell ${sell_value:,.0f} + fee ${est_cost:,.0f})" if sell_value > 0 else f" (buy ${buy_value:,.0f} + fee ${est_cost:,.0f})")
                 + f" vs available ${available_cash:,.0f} -- sufficient.",
             ]
+
+        # ── Enhancement 3: D.1 Cash Reserve Summary ───────────────────────────
+        tradeable_nav = max(0.0, nav - est_cost)
+        L += [
+            "",
+            "**D.1 Cash Reserve Summary**",
+            "",
+            "| Item | Amount |",
+            "|------|--------|",
+            f"| Current NAV | ${nav:,.2f} |",
+            f"| Estimated Cost Buffer | ~${est_cost:,.0f} ({plan.estimated_cost_bps:.0f} bps) |",
+            f"| **Tradeable NAV** | **${tradeable_nav:,.2f}** |",
+        ]
+
+        # ── Enhancement 2: D.2 Human Execution Suggestion ─────────────────────
+        buy_orders_sorted = sorted(
+            [o for o in plan.orders if o.delta_weight > 0], key=lambda x: x.symbol
+        )
+        sell_orders_sorted = sorted(
+            [o for o in plan.orders if o.delta_weight < 0], key=lambda x: x.symbol
+        )
+
+        if buy_orders_sorted:
+            # Scale buy notionals proportionally to tradeable_nav
+            if buy_value > 0:
+                scale = tradeable_nav / buy_value if buy_value > 0 else 1.0
+            else:
+                scale = 1.0
+
+            has_prices = latest_prices is not None and any(
+                o.symbol in latest_prices for o in buy_orders_sorted
+            )
+
+            L += [
+                "",
+                "**D.2 Human Execution Suggestion** "
+                "_(manual trading aid only -- not formal strategy output)_",
+                "",
+            ]
+
+            if has_prices:
+                L += [
+                    f"_Reference prices from US market close on {market_data_date}._",
+                    "_Quantities floor-rounded to whole shares. Verify prices at your broker before placing orders._",
+                    "",
+                    "| Symbol | Action | Suggested Notional* | Ref Price | Suggested Qty | Residual Cash |",
+                    "|--------|--------|--------------------:|----------:|--------------:|--------------:|",
+                ]
+                total_residual = 0.0
+                for o in buy_orders_sorted:
+                    sug_notional = o.delta_weight * nav * scale
+                    price = latest_prices.get(o.symbol)
+                    if price and price > 0:
+                        qty = math.floor(sug_notional / price)
+                        filled = qty * price
+                        residual = sug_notional - filled
+                        total_residual += residual
+                        L.append(
+                            f"| {o.symbol} | BUY | ${sug_notional:,.0f} "
+                            f"| ${price:,.2f} | {qty:,} | ${residual:,.2f} |"
+                        )
+                    else:
+                        L.append(
+                            f"| {o.symbol} | BUY | ${sug_notional:,.0f} "
+                            f"| N/A | N/A | N/A |"
+                        )
+                L.append(
+                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})._"
+                    f"  \n_Total residual cash from rounding: ~${total_residual:,.2f}._"
+                )
+            else:
+                L += [
+                    "_Reference prices not available -- showing notional amounts only._",
+                    "",
+                    "| Symbol | Action | Suggested Notional* |",
+                    "|--------|--------|--------------------:|",
+                ]
+                for o in buy_orders_sorted:
+                    sug_notional = o.delta_weight * nav * scale
+                    L.append(f"| {o.symbol} | BUY | ${sug_notional:,.0f} |")
+                L.append(
+                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})._"
+                )
+
+        if sell_orders_sorted:
+            L += [
+                "",
+                "| Symbol | Action | Sell Notional (at target weight) |",
+                "|--------|--------|--------------------------------:|",
+            ]
+            for o in sell_orders_sorted:
+                sell_notional = abs(o.delta_weight) * nav
+                L.append(f"| {o.symbol} | SELL | ${sell_notional:,.0f} |")
 
     # ── Section E: Risk Checks ────────────────────────────────────────────────
     L += [

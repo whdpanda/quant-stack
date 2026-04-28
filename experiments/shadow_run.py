@@ -290,6 +290,14 @@ def main() -> None:
         source_record_id="",
     )
 
+    # Extract reference prices from the last market close row (display only)
+    latest_row = close.iloc[-1]
+    latest_prices = {
+        sym: float(latest_row[sym])
+        for sym in RISK_ON_UNIVERSE
+        if sym in latest_row.index and not __import__("math").isnan(float(latest_row[sym]))
+    }
+
     print(f"\n  Signal date : {target.rebalance_date}")
     print("  Target weights:")
     for sym, w in sorted(target.weights.items(), key=lambda x: -x[1]):
@@ -318,6 +326,7 @@ def main() -> None:
         weighting_method=WEIGHTING_METHOD_DISPLAY,
         universe=RISK_ON_UNIVERSE,
         universe_type=UNIVERSE_TYPE_DISPLAY,
+        latest_prices=latest_prices,
     )
 
     plan = shadow_result.plan
