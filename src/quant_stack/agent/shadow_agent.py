@@ -1,35 +1,49 @@
 """LLM-driven shadow execution agent.
 
-Wraps the 11 shadow_run agent tools with an Anthropic tool-use loop,
-providing natural language access to shadow execution analysis.
+Wraps the 11 shadow_run agent tools with a tool-use loop, providing
+natural language access to shadow execution analysis.  The LLM provider
+is pluggable: Anthropic, OpenAI, DeepSeek, Groq, Ollama, or any
+OpenAI-compatible endpoint.
 
 Architecture
 ------------
-    ShadowAgentContext  — project-level defaults injected into the system prompt
+    ShadowAgentContext  — project-level defaults (strategy, paths)
     ShadowAgent         — LLM runtime + tool dispatch + safety guardrails
     ALLOWED_TOOL_NAMES  — explicit whitelist (all 11 shadow_run tools)
     FORBIDDEN_TOOLS     — explicit blacklist (broker / order tools)
+    LLMBackend          — provider abstraction (see providers.py)
 
 Safety guarantee
 ----------------
     - Only tools in ALLOWED_TOOL_NAMES can be dispatched.
-    - FORBIDDEN_TOOLS calls return a "blocked" error, never execute.
-    - summarize_shadow_run_tool enforces dry_run=True unconditionally (in the tool layer).
-    - No tool in this package submits orders or connects to a broker.
+    - FORBIDDEN_TOOLS calls return status=blocked, never execute.
+    - summarize_shadow_run_tool enforces dry_run=True at the tool layer.
+    - No tool submits orders or connects to a broker.
 
 Usage
 -----
     from quant_stack.agent.shadow_agent import ShadowAgent, ShadowAgentContext
 
-    ctx = ShadowAgentContext(positions_path="data/current_positions.json")
-    agent = ShadowAgent(agent_ctx=ctx)
+    # Default: Anthropic Claude
+    agent = ShadowAgent()
     print(agent.run("读取 latest shadow run，告诉我今天是否适合人工执行"))
 
-    # Multi-turn (history preserved within one ShadowAgent instance)
-    agent.run("还有什么风险需要注意？")
+    # Switch to OpenAI
+    agent = ShadowAgent(provider="openai", model="gpt-4o")
 
-    # Start fresh
-    agent.reset()
+    # Switch to DeepSeek
+    agent = ShadowAgent(provider="deepseek")
+
+    # Switch to local Ollama
+    agent = ShadowAgent(provider="ollama", model="qwen2.5:14b")
+
+    # Bring your own backend
+    from quant_stack.agent.providers import create_backend
+    agent = ShadowAgent(backend=create_backend("groq", model="llama-3.3-70b-versatile"))
+
+    # Multi-turn (history preserved within one instance)
+    agent.run("还有什么风险需要注意？")
+    agent.reset()   # start fresh
 """
 from __future__ import annotations
 
@@ -39,6 +53,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from quant_stack.agent.providers import LLMBackend, ToolResult, create_backend
 from quant_stack.agent.tools import ToolContext, dispatch
 from quant_stack.agent.tools import TOOL_SCHEMAS
 from quant_stack.research.strategies.sector_momentum import RISK_ON_UNIVERSE
@@ -110,10 +125,10 @@ before they make a manual trading decision.
 ## Response Guidelines
 - Respond in the user's language (Chinese or English — match the query)
 - Lead with the key conclusion, then supporting details
-- Surface WARN or FAIL risk checks prominently (bold or at the top)
+- Surface WARN or FAIL risk checks prominently
 - End with 1-3 concrete next-step suggestions for the portfolio manager
-- Never phrase a suggestion as a trade instruction (e.g., avoid "Buy GDX now")
-- Suggestions should be review actions (e.g., "请检查 Section D.2 的实时价格偏差规则")
+- Never phrase a suggestion as a trade instruction (avoid "Buy GDX now")
+- Suggestions should be review actions (e.g., "请检查 Section G.2 的价格偏差规则")
 """
 
 
@@ -135,11 +150,9 @@ class ShadowAgentContext:
     top_n: int = 3
 
     def latest_summary_exists(self) -> bool:
-        """True if the latest shadow run has produced a summary file."""
         return (Path(self.latest_dir) / "shadow_execution_summary.md").exists()
 
     def to_context_block(self) -> str:
-        """Multi-line text block for the system prompt."""
         has_run = self.latest_summary_exists()
         lines = [
             f"Strategy   : {self.strategy_name}",
@@ -147,7 +160,8 @@ class ShadowAgentContext:
             f"Weighting  : {self.weighting_method}",
             f"Params     : momentum_window={self.momentum_window}d, top_n={self.top_n}",
             f"Positions  : {self.positions_path}",
-            f"Latest run : {self.latest_dir}/ ({'ready' if has_run else 'no run yet — call summarize_shadow_run_tool first'})",
+            f"Latest run : {self.latest_dir}/ "
+            f"({'ready' if has_run else 'no run yet — call summarize_shadow_run_tool first'})",
         ]
         return "\n".join(f"  {line}" for line in lines)
 
@@ -157,45 +171,45 @@ class ShadowAgentContext:
 class ShadowAgent:
     """LLM-driven agent for shadow execution analysis.
 
-    Uses the Anthropic tool-use API to orchestrate the 11 shadow_run tools
-    based on natural language queries.
+    Provider-agnostic: Anthropic, OpenAI, DeepSeek, Groq, Ollama, or any
+    OpenAI-compatible endpoint — controlled by the ``provider`` / ``backend`` args.
 
-    Multi-turn support: conversation history and ToolContext persist across
-    run() calls within the same ShadowAgent instance.  Call reset() to start
-    a fresh conversation.
+    Conversation history and ToolContext persist across run() calls.
+    Call reset() to start a fresh conversation.
 
     Args:
-        agent_ctx:      Project-level defaults (strategy, paths). Defaults to
-                        ShadowAgentContext() which reads the current project layout.
-        model:          Anthropic model ID (default claude-sonnet-4-6).
+        agent_ctx:      Project context (strategy, paths). Defaults to current layout.
+        backend:        Pre-built LLMBackend instance. Overrides provider/model.
+        provider:       Provider name: 'anthropic' (default), 'openai', 'deepseek',
+                        'groq', 'ollama', 'openai-compatible'.
+        model:          Model name override (uses each provider's default if None).
         max_tokens:     Max tokens per LLM response (default 4096).
         max_tool_rounds:Hard limit on tool-use iterations per run() call.
-                        Prevents infinite loops if the model keeps calling tools.
     """
 
     def __init__(
         self,
         agent_ctx: ShadowAgentContext | None = None,
-        model: str = "claude-sonnet-4-6",
+        backend: LLMBackend | None = None,
+        provider: str = "anthropic",
+        model: str | None = None,
         max_tokens: int = 4096,
         max_tool_rounds: int = 10,
     ) -> None:
         self.agent_ctx = agent_ctx or ShadowAgentContext()
-        self.model = model
         self.max_tokens = max_tokens
         self.max_tool_rounds = max_tool_rounds
         self.tool_ctx = ToolContext()
-        self._history: list[dict[str, Any]] = []
-        self._client = _build_anthropic_client()
+        self._backend: LLMBackend = backend or create_backend(provider=provider, model=model)
 
     # ── Public API ────────────────────────────────────────────────────────
 
     def run(self, query: str, *, verbose: bool = False) -> str:
         """Process one user message and return the agent's text response.
 
-        Internally executes the Anthropic tool-use loop: the LLM decides which
-        tools to call, results are fed back, until the LLM produces a final text
-        response.  Conversation history is appended automatically.
+        Internally runs the tool-use loop: the LLM decides which tools to call,
+        results are fed back, until a final text response is produced.
+        Conversation history is appended automatically for multi-turn use.
 
         Args:
             query:   Natural language question or instruction.
@@ -204,76 +218,64 @@ class ShadowAgent:
         Returns:
             The agent's final text response.
         """
-        self._history.append({"role": "user", "content": query})
+        self._backend.add_user_message(query)
         system = _SYSTEM_PROMPT_TEMPLATE.format(
             context_block=self.agent_ctx.to_context_block(),
         )
 
         for round_idx in range(self.max_tool_rounds):
             if verbose:
-                print(f"\n  [agent] LLM round {round_idx + 1}/{self.max_tool_rounds}", file=sys.stderr)
+                print(f"\n  [{self._backend.provider_name}] round {round_idx + 1}/{self.max_tool_rounds}", file=sys.stderr)
 
-            response = self._client.messages.create(
-                model=self.model,
+            response = self._backend.chat(
                 system=system,
-                messages=self._history,
                 tools=ALLOWED_TOOL_SCHEMAS,
                 max_tokens=self.max_tokens,
             )
 
-            # Append assistant turn (preserve ContentBlock objects — SDK accepts them)
-            self._history.append({"role": "assistant", "content": response.content})
+            if not response.needs_tool_use:
+                return response.text or "(no response text)"
 
-            if response.stop_reason in ("end_turn", "stop_sequence", "max_tokens"):
-                return _extract_text(response)
-
-            if response.stop_reason != "tool_use":
-                return _extract_text(response)
-
-            # ── Execute all tool calls in this response ────────────────
-            tool_results: list[dict[str, Any]] = []
-            for block in response.content:
-                if not hasattr(block, "type") or block.type != "tool_use":
-                    continue
-
+            # ── Execute all tool calls ─────────────────────────────────
+            tool_results: list[ToolResult] = []
+            for tc in response.tool_calls:
                 if verbose:
-                    input_preview = json.dumps(block.input, ensure_ascii=False)
+                    input_preview = json.dumps(tc.inputs, ensure_ascii=False)
                     if len(input_preview) > 80:
                         input_preview = input_preview[:77] + "..."
-                    print(f"  [tool] {block.name}({input_preview})", file=sys.stderr)
+                    print(f"  [tool] {tc.name}({input_preview})", file=sys.stderr)
 
-                result = self._dispatch_tool(block.name, block.input)
+                result = self._dispatch_tool(tc.name, tc.inputs)
 
                 if verbose:
                     print(f"         → status={result.get('status', '?')}", file=sys.stderr)
 
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(result, ensure_ascii=False, default=str),
-                })
+                tool_results.append(ToolResult(
+                    id=tc.id,
+                    content=json.dumps(result, ensure_ascii=False, default=str),
+                ))
 
             if not tool_results:
-                # No tool_use blocks despite tool_use stop reason — shouldn't happen
                 break
 
-            self._history.append({"role": "user", "content": tool_results})
+            self._backend.add_tool_results(tool_results)
 
         return "[Agent: maximum tool-use rounds reached without a final response.]"
 
     def reset(self) -> None:
-        """Clear conversation history and shared ToolContext.
-
-        Call this to start a completely fresh conversation without creating
-        a new ShadowAgent instance.
-        """
-        self._history.clear()
+        """Clear conversation history and shared ToolContext for a fresh session."""
+        self._backend.reset_history()
         self.tool_ctx = ToolContext()
 
     @property
+    def provider_name(self) -> str:
+        """Human-readable name of the active LLM provider."""
+        return self._backend.provider_name
+
+    @property
     def turn_count(self) -> int:
-        """Number of user turns in the current conversation."""
-        return sum(1 for m in self._history if m["role"] == "user")
+        """Number of run() calls in the current conversation (approximate)."""
+        return getattr(self._backend, "_turn_count", 0)
 
     # ── Internal ──────────────────────────────────────────────────────────
 
@@ -293,29 +295,8 @@ class ShadowAgent:
             return {
                 "status": "blocked",
                 "error": (
-                    f"Tool '{name}' is not in the approved tool list for this agent. "
+                    f"Tool '{name}' is not in the approved tool list. "
                     f"Allowed: {sorted(ALLOWED_TOOL_NAMES)}"
                 ),
             }
         return dispatch(name, inputs, self.tool_ctx)
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _build_anthropic_client() -> Any:
-    """Build an Anthropic client; raise ImportError with install instructions."""
-    try:
-        import anthropic
-    except ImportError as e:
-        raise ImportError(
-            "The 'anthropic' package is required.\n"
-            "Install: pip install anthropic\n"
-            "API key : set ANTHROPIC_API_KEY environment variable."
-        ) from e
-    return anthropic.Anthropic()
-
-
-def _extract_text(response: Any) -> str:
-    """Extract concatenated text from all TextBlock items in a response."""
-    parts = [block.text for block in response.content if hasattr(block, "text")]
-    return "\n".join(parts).strip() or "(no text response)"

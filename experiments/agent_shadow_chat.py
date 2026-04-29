@@ -43,6 +43,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from quant_stack.agent.shadow_agent import ShadowAgent, ShadowAgentContext
 
 
+_API_KEY_ENVS: dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "ollama": "",   # no key needed
+    "openai-compatible": "",  # varies; let the backend handle it
+}
+
 _EXAMPLE_QUERIES = [
     '帮我解释今天 shadow run 为什么建议买这些 ETF',
     '读取 latest shadow run，告诉我今天是否适合人工执行',
@@ -54,9 +63,23 @@ _EXAMPLE_QUERIES = [
 ]
 
 
+def _check_api_key(provider: str) -> None:
+    """Exit early with a clear message if the required API key is missing."""
+    env_var = _API_KEY_ENVS.get(provider, "")
+    if not env_var:
+        return   # ollama / openai-compatible don't need a key check here
+    if not os.environ.get(env_var):
+        print(
+            f"Error: {env_var} is not set.\n"
+            f"Set it with: export {env_var}=<your-key>",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def _build_agent(args: argparse.Namespace) -> ShadowAgent:
     ctx = ShadowAgentContext(positions_path=args.positions)
-    return ShadowAgent(agent_ctx=ctx)
+    return ShadowAgent(agent_ctx=ctx, provider=args.provider, model=args.model or None)
 
 
 def _print_separator(char: str = "─", width: int = 70) -> None:
@@ -76,7 +99,7 @@ def _run_single_shot(agent: ShadowAgent, query: str, verbose: bool) -> None:
 def _run_interactive(agent: ShadowAgent, verbose: bool) -> None:
     """Interactive multi-turn chat loop."""
     _print_separator("=")
-    print("  Shadow Agent — Interactive Mode")
+    print(f"  Shadow Agent — Interactive Mode  [{agent.provider_name}]")
     print("  Type 'help' for example queries, 'reset' to clear context, 'exit' to quit.")
     _print_separator("=")
 
@@ -134,20 +157,27 @@ def main() -> None:
         help="Path to current_positions.json (default: data/current_positions.json)",
     )
     parser.add_argument(
+        "--provider", "-p",
+        type=str,
+        default="anthropic",
+        choices=["anthropic", "openai", "deepseek", "groq", "ollama", "openai-compatible"],
+        help="LLM provider (default: anthropic)",
+    )
+    parser.add_argument(
+        "--model", "-m",
+        type=str,
+        default=None,
+        help="Model name override (uses each provider's default if omitted)",
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Print tool call details to stderr during execution",
     )
     args = parser.parse_args()
 
-    # Check for API key early with a clear message
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print(
-            "Error: ANTHROPIC_API_KEY is not set.\n"
-            "Set it with: export ANTHROPIC_API_KEY=sk-ant-...",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # Check for API key early with provider-specific guidance
+    _check_api_key(args.provider)
 
     agent = _build_agent(args)
 
