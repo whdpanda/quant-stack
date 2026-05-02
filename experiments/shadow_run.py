@@ -60,9 +60,11 @@ from quant_stack.execution.positions import load_positions_json
 from quant_stack.execution.service import RebalanceService
 from quant_stack.execution.shadow import ShadowExecutionService
 from quant_stack.research.strategies.sector_momentum import (
+    HysteresisMode,
     RISK_ON_UNIVERSE,
     SectorMomentumStrategy,
     WeightingScheme,
+    apply_hysteresis,
     compute_strength,
 )
 from quant_stack.research.vbt_adapter import signal_frame_to_weights
@@ -73,6 +75,7 @@ STRATEGY_NAME = "sector_momentum_210d_top3"
 MOMENTUM_WINDOW = 210
 TOP_N = 3
 VOL_WINDOW = 63
+ENTRY_MARGIN = 0.02   # hysteresis: new ETF must beat displaced ETF by >= 2pp ROC
 WEIGHTING_METHOD_DISPLAY = "BLEND_70_30 (70% equal + 30% inverse-vol)"
 UNIVERSE_TYPE_DISPLAY = "Sector / industry / thematic ETFs"
 
@@ -150,10 +153,16 @@ def _generate_target_weights(close: "pd.DataFrame") -> PortfolioWeights:
     import pandas as pd
 
     strategy = SectorMomentumStrategy(momentum_window=MOMENTUM_WINDOW, top_n=TOP_N)
-    signals = strategy.generate_signals(close)
+    raw_signals, ranks, mom_scores = strategy.generate_signals_full(close)
+    signals = apply_hysteresis(
+        raw_signals, ranks, mom_scores,
+        mode=HysteresisMode.ENTRY_MARGIN,
+        top_n=TOP_N,
+        entry_margin=ENTRY_MARGIN,
+    )
 
     # BLEND_70_30 = 70% equal-weight + 30% inverse-vol
-    strength = compute_strength(signals, close, WeightingScheme.BLEND_70_30)
+    strength = compute_strength(signals, close, WeightingScheme.BLEND_70_30, vol_window=VOL_WINDOW)
 
     sf = SignalFrame(signals=signals, strength=strength, strategy_name=strategy.name)
     weights_df = signal_frame_to_weights(sf)
