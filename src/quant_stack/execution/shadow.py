@@ -784,8 +784,6 @@ def _build_summary_markdown(
         has_prices = latest_prices is not None and any(
             o.symbol in latest_prices for o in plan.orders
         )
-        buy_scale = tradeable_nav / buy_value if buy_value > 0 else 1.0
-
         L += [
             "",
             "**D.2 Human Execution Suggestion** "
@@ -815,7 +813,7 @@ def _build_summary_markdown(
                 ]
                 total_residual = 0.0
                 for o in buy_orders_sorted:
-                    sug_notional = o.delta_weight * nav * buy_scale
+                    sug_notional = o.delta_weight * nav  # delta notional = Delta $ from Section D
                     price = latest_prices.get(o.symbol) if latest_prices else None
                     if price and price > 0:
                         qty = math.floor(sug_notional / price)
@@ -831,7 +829,7 @@ def _build_summary_markdown(
                             f"| N/A | N/A | N/A |"
                         )
                 L.append(
-                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})."
+                    f"\n_* Suggested Notional = delta-weight × NAV = Delta $ in Section D."
                     f" Est. residual from floor-rounding at ref price: ~${total_residual:,.2f}._"
                 )
             else:
@@ -841,10 +839,10 @@ def _build_summary_markdown(
                     "|--------|--------|--------------------:|",
                 ]
                 for o in buy_orders_sorted:
-                    sug_notional = o.delta_weight * nav * buy_scale
+                    sug_notional = o.delta_weight * nav  # delta notional = Delta $ from Section D
                     L.append(f"| {o.symbol} | BUY | ${sug_notional:,.0f} |")
                 L.append(
-                    f"\n_* Suggested notionals = delta-weight x Tradeable NAV (${tradeable_nav:,.0f})."
+                    "\n_* Suggested Notional = delta-weight × NAV = Delta $ in Section D."
                     " Reference prices unavailable -- calculate qty at your broker using real-time price._"
                 )
 

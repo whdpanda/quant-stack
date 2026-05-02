@@ -29,3 +29,4 @@ execution_artifacts/
 lean_output/
 # Shadow execution artifacts
 shadow_artifacts/
+data/current_positions.json
