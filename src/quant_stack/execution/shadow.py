@@ -61,6 +61,11 @@ def _count_bdays(start: date, end: date) -> int:
     return count
 
 
+def _fmt_cost(usd: float) -> str:
+    """Format a transaction cost amount — always 2 dp, never rounds sub-dollar values to $0."""
+    return f"${usd:,.2f}"
+
+
 # ── Service ───────────────────────────────────────────────────────────────────
 
 class ShadowExecutionService:
@@ -251,8 +256,11 @@ class ShadowExecutionService:
         # ── 8. Sync to latest/ ────────────────────────────────────────────
         latest_dir = self.shadow_dir / "latest"
         if latest_dir.exists():
-            shutil.rmtree(latest_dir)
-        shutil.copytree(run_dir, latest_dir)
+            # ignore_errors=True lets rmtree clear the contents even when
+            # Windows file-watchers keep the directory handle open.
+            shutil.rmtree(latest_dir, ignore_errors=True)
+        # dirs_exist_ok=True handles the case where rmtree left an empty dir.
+        shutil.copytree(run_dir, latest_dir, dirs_exist_ok=True)
 
         return ShadowRunResult(
             run_id=run_id,
@@ -270,20 +278,28 @@ class ShadowExecutionService:
 
 def _build_positions_artifact(snapshot: PositionSnapshot) -> dict:
     nav = snapshot.nav
+    positions_out: dict = {}
+    for sym, w in sorted(snapshot.positions.items(), key=lambda x: -x[1]):
+        entry: dict = {
+            "weight": round(w, 8),          # full precision — derived from market_value/nav
+            "market_value_usd": round(w * nav, 2),
+        }
+        meta = snapshot.position_metadata.get(sym, {})
+        if "quantity" in meta:
+            entry["quantity"] = meta["quantity"]
+        if "last_price_usd" in meta:
+            entry["last_price_usd"] = round(meta["last_price_usd"], 4)
+        positions_out[sym] = entry
+
     return {
         "as_of": snapshot.timestamp.isoformat(timespec="seconds"),
         "source": snapshot.source,
+        "input_format": "amount_driven" if snapshot.position_metadata else "legacy_weight",
         "nav": nav,
-        "invested_fraction": round(sum(snapshot.positions.values()), 6),
-        "cash_fraction": round(snapshot.cash_fraction, 6),
-        "cash_value_usd": round(snapshot.cash_fraction * nav, 2),
-        "positions": {
-            sym: {
-                "weight": round(w, 6),
-                "value_usd": round(w * nav, 2),
-            }
-            for sym, w in sorted(snapshot.positions.items(), key=lambda x: -x[1])
-        },
+        "invested_fraction": round(sum(snapshot.positions.values()), 8),
+        "cash_fraction": round(snapshot.cash_fraction, 8),
+        "cash_usd": round(snapshot.cash_fraction * nav, 2),
+        "positions": positions_out,
     }
 
 
@@ -349,7 +365,8 @@ def _build_rebalance_plan_artifact(
     est_cost_usd = plan.total_turnover * plan.estimated_cost_bps / 10_000 * nav
     buy_value = sum(o.delta_weight * nav for o in plan.orders if o.delta_weight > 0)
     sell_value = sum(-o.delta_weight * nav for o in plan.orders if o.delta_weight < 0)
-    net_cash_needed = max(0.0, buy_value - sell_value) + est_cost_usd
+    principal_cash_needed = max(0.0, buy_value - sell_value)
+    est_total_cash_needed = principal_cash_needed + est_cost_usd
 
     return {
         "run_id": run_id,
@@ -371,7 +388,8 @@ def _build_rebalance_plan_artifact(
             "sell_proceeds_usd": round(sell_value, 2),
             "estimated_cost_bps": plan.estimated_cost_bps,
             "estimated_cost_usd": round(est_cost_usd, 2),
-            "net_cash_needed_usd": round(net_cash_needed, 2),
+            "principal_cash_needed_usd": round(principal_cash_needed, 2),
+            "est_total_cash_needed_usd": round(est_total_cash_needed, 2),
             "available_cash_usd": round(snapshot.cash_fraction * nav, 2),
         },
         "orders": orders,
@@ -454,8 +472,12 @@ def _build_risk_check_artifact(
         "detail": detail,
     })
 
-    # 4. Cash sufficiency — compare (net buy notional + estimated fee) to available cash.
-    # Sells generate cash that can fund buys; fees are an additional cash outflow.
+    # 4. Cash sufficiency — two-part check.
+    # Hard gate: principal coverage only (buy notional net of sell proceeds).
+    # Soft note: estimated fee buffer (whether fee is also covered by available cash).
+    # Rationale: fees are approximate and may be deducted from sale proceeds or inside
+    # the broker's fill mechanism; blocking on fee coverage alone would be too strict.
+    fee_shortfall_usd = 0.0
     if plan.total_turnover == 0:
         cash_ok = True
         cash_detail = "No orders -- cash check not applicable"
@@ -464,21 +486,35 @@ def _build_risk_check_artifact(
         sell_value = sum(-o.delta_weight * nav for o in plan.orders if o.delta_weight < 0)
         est_cost_usd = plan.total_turnover * service.cost_bps / 10_000 * nav
         available_cash = snapshot.cash_fraction * nav
-        net_cash_needed = max(0.0, buy_value - sell_value) + est_cost_usd
-        cash_ok = net_cash_needed <= available_cash + 0.50  # $0.50 rounding tolerance
+        net_principal = max(0.0, buy_value - sell_value)
+        net_with_fee = net_principal + est_cost_usd
+        # Hard gate: principal only (0.01 float-rounding tolerance)
+        principal_covered = net_principal <= available_cash + 0.01
+        fee_covered = net_with_fee <= available_cash + 0.01
+        cash_ok = principal_covered
+        fee_shortfall_usd = round(max(0.0, net_with_fee - available_cash), 2)
 
-        sell_note = f" - sell proceeds ${sell_value:,.0f}" if sell_value > 0 else ""
-        if cash_ok:
+        sell_note = f" - sell proceeds ${sell_value:,.2f}" if sell_value > 0 else ""
+        if not principal_covered:
+            shortage = net_principal - available_cash
             cash_detail = (
-                f"Cash sufficient: buy ${buy_value:,.0f}{sell_note} + fee ${est_cost_usd:,.0f}"
-                f" = net ${net_cash_needed:,.0f} vs available ${available_cash:,.0f}"
+                f"Principal coverage: FAIL -- need ${net_principal:,.2f}{sell_note}"
+                f" but only ${available_cash:,.2f} available (short by ${shortage:,.2f})."
+            )
+        elif fee_covered:
+            cash_detail = (
+                f"Principal coverage: PASS -- buy ${buy_value:,.2f}{sell_note}"
+                f" <= available ${available_cash:,.2f}. "
+                f"Estimated fee buffer: covered"
+                f" (total ${net_with_fee:,.2f} <= available ${available_cash:,.2f})."
             )
         else:
-            shortage = net_cash_needed - available_cash
             cash_detail = (
-                f"WARNING: need ${net_cash_needed:,.0f}"
-                f" (buy ${buy_value:,.0f}{sell_note} + fee ${est_cost_usd:,.0f})"
-                f" but only ${available_cash:,.0f} available -- short by ${shortage:,.0f}"
+                f"Principal coverage: PASS -- buy ${buy_value:,.2f}{sell_note}"
+                f" <= available ${available_cash:,.2f}. "
+                f"Estimated fee buffer: SHORTFALL -- buy + est. fee"
+                f" ${net_with_fee:,.2f} vs available ${available_cash:,.2f}"
+                f" (short by ${fee_shortfall_usd:,.2f})."
             )
 
     checks.append({
@@ -486,6 +522,7 @@ def _build_risk_check_artifact(
         "severity": "warning",
         "passed": cash_ok,
         "detail": cash_detail,
+        "fee_shortfall_usd": fee_shortfall_usd,
     })
 
     # 5. Duplicate execution guard.
@@ -602,7 +639,8 @@ def _build_summary_markdown(
     buy_orders = [o for o in plan.orders if str(o.side) == "buy"]
     sell_orders = [o for o in plan.orders if str(o.side) == "sell"]
     weight_sum = sum(target.weights.values())
-    est_cost = plan.total_turnover * plan.estimated_cost_bps / 10_000 * nav
+    traded_notional = plan.total_turnover * nav
+    est_cost = traded_notional * plan.estimated_cost_bps / 10_000
 
     # Enhancement 1: time fields
     market_data_date = target.rebalance_date
@@ -610,6 +648,8 @@ def _build_summary_markdown(
     trading_age = _count_bdays(market_data_date, ts.date())
 
     has_cash_warning = "cash_sufficiency" in risk_data.get("warnings", [])
+    _cash_check = next((c for c in risk_data["checks"] if c["check"] == "cash_sufficiency"), {})
+    has_fee_shortfall = _cash_check.get("fee_shortfall_usd", 0.0) > 0.01
 
     if not result.success:
         recommendation = "BLOCKED -- execution blocked (kill switch or risk violation). Review risk checks."
@@ -619,7 +659,7 @@ def _build_summary_markdown(
         action = "No action needed this cycle."
     elif has_cash_warning:
         recommendation = (
-            f"Rebalance recommended -- {len(plan.orders)} order(s) to execute, "
+            f"Strategy recommends {len(plan.orders)} trade adjustment(s), "
             "subject to resolving the cash shortfall noted in Section D."
         )
         action = (
@@ -627,7 +667,7 @@ def _build_summary_markdown(
             "before placing orders, then execute manually at your broker."
         )
     else:
-        recommendation = f"Rebalance recommended -- {len(plan.orders)} order(s) to execute."
+        recommendation = f"Strategy recommends {len(plan.orders)} trade adjustment(s)."
         action = "Review the order plan, then execute manually at your broker if approved."
 
     # ── Section A: Basic Information ──────────────────────────────────────────
@@ -667,16 +707,43 @@ def _build_summary_markdown(
     ]
 
     if snapshot.positions:
-        L += [
-            "| Symbol | Weight | Value (USD) |",
-            "|--------|--------|-------------|",
-        ]
-        for sym, w in sorted(snapshot.positions.items(), key=lambda x: -x[1]):
-            L.append(f"| {sym} | {w:.2%} | ${w * nav:,.0f} |")
-        L.append(
-            f"| **CASH** | **{snapshot.cash_fraction:.2%}** "
-            f"| **${snapshot.cash_fraction * nav:,.0f}** |"
+        has_qty = any(
+            "quantity" in snapshot.position_metadata.get(sym, {})
+            for sym in snapshot.positions
         )
+        if has_qty:
+            # Amount-driven format: show quantity, price, exact market value
+            L += [
+                "| Symbol | Qty | Last Price | Market Value | Weight |",
+                "|--------|----:|----------:|-------------:|-------:|",
+            ]
+            for sym, w in sorted(snapshot.positions.items(), key=lambda x: -x[1]):
+                mv = w * nav          # always use w × nav as display value
+                meta = snapshot.position_metadata.get(sym, {})
+                qty = meta.get("quantity", "—")
+                price_str = f"${meta['last_price_usd']:,.2f}" if "last_price_usd" in meta else "—"
+                L.append(f"| {sym} | {qty} | {price_str} | ${mv:,.2f} | {w:.2%} |")
+            L.append(
+                f"| **CASH** | — | — | **${snapshot.cash_fraction * nav:,.2f}** "
+                f"| **{snapshot.cash_fraction:.2%}** |"
+            )
+            L.append("")
+            L.append(
+                "_Market values are the source-of-truth inputs; displayed weights are derived from "
+                "precise market_value_usd / nav_usd and may be rounded._"
+            )
+        else:
+            # Legacy format: weight-fraction display
+            L += [
+                "| Symbol | Weight | Value (USD) |",
+                "|--------|--------|-------------|",
+            ]
+            for sym, w in sorted(snapshot.positions.items(), key=lambda x: -x[1]):
+                L.append(f"| {sym} | {w:.2%} | ${w * nav:,.0f} |")
+            L.append(
+                f"| **CASH** | **{snapshot.cash_fraction:.2%}** "
+                f"| **${snapshot.cash_fraction * nav:,.0f}** |"
+            )
     else:
         L += [
             "| Symbol | Weight | Value (USD) |",
@@ -726,43 +793,56 @@ def _build_summary_markdown(
             L.append(
                 f"| {o.symbol} | **{str(o.side).upper()}** "
                 f"| {cur:.2%} | {o.target_weight:.2%} "
-                f"| {o.delta_weight:+.2%} | ${delta_usd:+,.0f} |"
+                f"| {o.delta_weight:+.2%} | ${delta_usd:+,.2f} |"
             )
 
         # Turnover and cost
         buy_value = sum(o.delta_weight * nav for o in plan.orders if o.delta_weight > 0)
         sell_value = sum(-o.delta_weight * nav for o in plan.orders if o.delta_weight < 0)
-        net_cash_needed = max(0.0, buy_value - sell_value) + est_cost
+        net_principal = max(0.0, buy_value - sell_value)
+        net_with_fee = net_principal + est_cost
         available_cash = snapshot.cash_fraction * nav
+        principal_covered = net_principal <= available_cash + 0.01
+        fee_covered = net_with_fee <= available_cash + 0.01
+        sell_note_md = f" - sell ${sell_value:,.2f}" if sell_value > 0 else ""
 
         L += [
             "",
             f"**Total Turnover:** {plan.total_turnover:.2%}  ",
-            f"**Estimated Cost:** ~${est_cost:,.0f} ({plan.estimated_cost_bps:.0f} bps of NAV)",
+            f"**Estimated Cost:** ~{_fmt_cost(est_cost)}  ({plan.estimated_cost_bps:.0f} bps × traded notional of ${traded_notional:,.2f})",
         ]
 
-        # Cash note blockquote (existing logic, unchanged)
+        # Cash note — two-part: principal coverage (hard gate) then fee buffer (soft)
         L += [""]
-        if net_cash_needed > available_cash + 0.50:
-            shortage = net_cash_needed - available_cash
+        if not principal_covered:
+            shortage = net_principal - available_cash
             L += [
-                "> **Cash note:** Target weights above assume full NAV deployment.",
-                f"> Net cash needed to execute: **${net_cash_needed:,.0f}**"
-                + (f" (buy ${buy_value:,.0f} - sell ${sell_value:,.0f} + fee ${est_cost:,.0f})" if sell_value > 0 else f" (buy ${buy_value:,.0f} + fee ${est_cost:,.0f})"),
-                f"> Available cash: **${available_cash:,.0f}**  ",
-                f"> **Short by ~${shortage:,.0f}.** Before executing, ensure your account has",
-                f"> sufficient buying power, or scale down order sizes proportionally.",
+                "> **Cash note (principal):** FAIL -- buy"
+                + (f" ${buy_value:,.2f}{sell_note_md} = ${net_principal:,.2f}" if sell_value > 0 else f" ${buy_value:,.2f}")
+                + f" exceeds available ${available_cash:,.2f} (short by ${shortage:,.2f}).",
+                "> Reduce order sizes or deposit additional funds before executing.",
+            ]
+        elif fee_covered:
+            L += [
+                "> **Cash note (principal):** PASS -- buy"
+                + (f" ${buy_value:,.2f}{sell_note_md} = ${net_principal:,.2f}" if sell_value > 0 else f" ${buy_value:,.2f}")
+                + f" <= available ${available_cash:,.2f}.  ",
+                f"> **Estimated fee buffer:** covered -- total ${net_with_fee:,.2f} <= available ${available_cash:,.2f}.",
             ]
         else:
+            fee_shortfall = net_with_fee - available_cash
             L += [
-                "> **Cash note:** Net cash needed to execute:"
-                f" **${net_cash_needed:,.0f}**"
-                + (f" (buy ${buy_value:,.0f} - sell ${sell_value:,.0f} + fee ${est_cost:,.0f})" if sell_value > 0 else f" (buy ${buy_value:,.0f} + fee ${est_cost:,.0f})")
-                + f" vs available ${available_cash:,.0f} -- sufficient.",
+                "> **Cash note (principal):** PASS -- buy"
+                + (f" ${buy_value:,.2f}{sell_note_md} = ${net_principal:,.2f}" if sell_value > 0 else f" ${buy_value:,.2f}")
+                + f" <= available ${available_cash:,.2f}.  ",
+                f"> **Estimated fee buffer:** SHORTFALL -- buy + est. fee ${net_with_fee:,.2f}"
+                f" vs available ${available_cash:,.2f} (short by ${fee_shortfall:,.2f}).",
+                f"> Est. fee ({_fmt_cost(est_cost)}) may be deducted from proceeds;"
+                " verify your broker's fee settlement method.",
             ]
 
-        # ── Enhancement 3: D.1 Cash Reserve Summary ───────────────────────────
-        tradeable_nav = max(0.0, nav - est_cost)
+        # ── D.1 Cash Reserve Summary ───────────────────────────────────────────
+        post_cost_nav = max(0.0, nav - est_cost)
         L += [
             "",
             "**D.1 Cash Reserve Summary**",
@@ -770,8 +850,11 @@ def _build_summary_markdown(
             "| Item | Amount |",
             "|------|--------|",
             f"| Current NAV | ${nav:,.2f} |",
-            f"| Estimated Cost Buffer | ~${est_cost:,.0f} ({plan.estimated_cost_bps:.0f} bps) |",
-            f"| **Tradeable NAV** | **${tradeable_nav:,.2f}** |",
+            f"| Estimated Cost Buffer | ~{_fmt_cost(est_cost)} ({plan.estimated_cost_bps:.0f} bps × traded notional) |",
+            f"| **Post-Cost Effective NAV** | **${post_cost_nav:,.2f}** |",
+            "",
+            "_Post-Cost Effective NAV = NAV minus estimated cost buffer (cash planning view only)._"
+            " _Strategy target weights are sized against full NAV; this row does not affect order sizing._",
         ]
 
         # ── D.2 Human Execution Suggestion ─────────────────────────────────────
@@ -804,6 +887,8 @@ def _build_summary_markdown(
             "> based on yesterday's close and will be wrong if the price has moved.",
         ]
 
+        zero_qty_symbols: list[str] = []
+
         if buy_orders_sorted:
             if has_prices:
                 L += [
@@ -813,25 +898,35 @@ def _build_summary_markdown(
                 ]
                 total_residual = 0.0
                 for o in buy_orders_sorted:
-                    sug_notional = o.delta_weight * nav  # delta notional = Delta $ from Section D
+                    sug_notional = o.delta_weight * nav
                     price = latest_prices.get(o.symbol) if latest_prices else None
                     if price and price > 0:
                         qty = math.floor(sug_notional / price)
                         residual = sug_notional - qty * price
                         total_residual += residual
+                        if qty == 0:
+                            zero_qty_symbols.append(o.symbol)
                         L.append(
-                            f"| {o.symbol} | BUY | ${sug_notional:,.0f} "
+                            f"| {o.symbol} | BUY | ${sug_notional:,.2f} "
                             f"| ${price:,.2f} | {qty:,} | ${residual:,.2f} |"
                         )
                     else:
                         L.append(
-                            f"| {o.symbol} | BUY | ${sug_notional:,.0f} "
+                            f"| {o.symbol} | BUY | ${sug_notional:,.2f} "
                             f"| N/A | N/A | N/A |"
                         )
                 L.append(
                     f"\n_* Suggested Notional = delta-weight × NAV = Delta $ in Section D."
                     f" Est. residual from floor-rounding at ref price: ~${total_residual:,.2f}._"
                 )
+                if zero_qty_symbols:
+                    L += [
+                        "",
+                        f"> **Whole-share constraint:** {', '.join(zero_qty_symbols)} — "
+                        f"the strategy-level notional exists but is below the cost of one share at the reference price. "
+                        f"Est. Qty = 0; this trade is **not broker-executable** under whole-share constraints. "
+                        f"To execute, you would need a notional override, accumulated residual cash, or fractional-share support.",
+                    ]
             else:
                 L += [
                     "",
@@ -839,8 +934,8 @@ def _build_summary_markdown(
                     "|--------|--------|--------------------:|",
                 ]
                 for o in buy_orders_sorted:
-                    sug_notional = o.delta_weight * nav  # delta notional = Delta $ from Section D
-                    L.append(f"| {o.symbol} | BUY | ${sug_notional:,.0f} |")
+                    sug_notional = o.delta_weight * nav
+                    L.append(f"| {o.symbol} | BUY | ${sug_notional:,.2f} |")
                 L.append(
                     "\n_* Suggested Notional = delta-weight × NAV = Delta $ in Section D."
                     " Reference prices unavailable -- calculate qty at your broker using real-time price._"
@@ -920,6 +1015,16 @@ def _build_summary_markdown(
             L.append(f"- **Exiting (full liquidation):** {', '.join(exiting)}")
         if reweighting:
             L.append(f"- **Reweighting (partial change):** {', '.join(reweighting)}")
+        if not sell_orders:
+            L.append("- **Cash-only rebalance:** no sells required — all trades funded from available cash.")
+        if zero_qty_symbols:
+            executable_count = len(plan.orders) - len(zero_qty_symbols)
+            L.append(
+                f"- **Whole-share note:** strategy recommends {len(plan.orders)} trade adjustment(s); "
+                f"{len(zero_qty_symbols)} ({', '.join(zero_qty_symbols)}) round(s) to 0 shares at the reference price — "
+                f"not broker-executable under whole-share constraints. "
+                f"{executable_count} broker-executable order(s); see D.2 for execution options on the remainder."
+            )
         L.append("")
 
     if not result.success:

@@ -262,6 +262,7 @@ def main() -> None:
             positions=snapshot.positions,
             cash_fraction=snapshot.cash_fraction,
             source=snapshot.source,
+            position_metadata=snapshot.position_metadata,
         )
 
     print(f"  NAV      : ${snapshot.nav:,.2f}")
@@ -269,10 +270,18 @@ def main() -> None:
     if snapshot.positions:
         print("  Holdings :")
         for sym, w in sorted(snapshot.positions.items(), key=lambda x: -x[1]):
-            print(f"    {sym:6s}  {w:.2%}  (${w * snapshot.nav:,.0f})")
+            mv = w * snapshot.nav
+            meta = snapshot.position_metadata.get(sym, {})
+            qty = meta.get("quantity")
+            price = meta.get("last_price_usd")
+            if qty is not None and price is not None:
+                print(f"    {sym:6s}  {w:.2%}  ({qty:4d} sh × ${price:,.2f} = ${mv:,.2f})")
+            else:
+                print(f"    {sym:6s}  {w:.2%}  (${mv:,.2f})")
     else:
         print("  Holdings : NONE — all-cash (first rebalance)")
-    print(f"  Cash     : {snapshot.cash_fraction:.2%}  (${snapshot.cash_fraction * snapshot.nav:,.0f})")
+    cash_usd = snapshot.cash_fraction * snapshot.nav
+    print(f"  Cash     : {snapshot.cash_fraction:.2%}  (${cash_usd:,.2f})")
 
     # ── Step 2: Generate current target weights ─────────────────────────────────
     print(f"\n[2/6] Generating target weights from fresh market data...")
@@ -345,8 +354,8 @@ def main() -> None:
     # ── Step 4: Print rebalance plan ───────────────────────────────────────────
     print(f"\n[4/6] Rebalance plan:")
     if plan.orders:
-        header = f"  {'Symbol':6s}  {'Side':4s}  {'Current':>8s}  {'Target':>8s}  {'Delta':>8s}  {'Delta $':>10s}"
-        sep    = f"  {'─'*6}  {'─'*4}  {'─'*8}  {'─'*8}  {'─'*8}  {'─'*10}"
+        header = f"  {'Symbol':6s}  {'Side':4s}  {'Current':>8s}  {'Target':>8s}  {'Delta':>8s}  {'Delta $':>12s}"
+        sep    = f"  {'─'*6}  {'─'*4}  {'─'*8}  {'─'*8}  {'─'*8}  {'─'*12}"
         print(header)
         print(sep)
         for o in sorted(plan.orders, key=lambda x: x.symbol):
@@ -355,12 +364,14 @@ def main() -> None:
             print(
                 f"  {o.symbol:6s}  {str(o.side).upper():4s}"
                 f"  {cur:>8.2%}  {o.target_weight:>8.2%}"
-                f"  {o.delta_weight:>+8.2%}  {delta_usd:>+10,.0f}"
+                f"  {o.delta_weight:>+8.2%}  {delta_usd:>+12,.2f}"
             )
         nav = snapshot.nav
-        est_cost = plan.total_turnover * 20.0 / 10_000 * nav
+        traded_notional = plan.total_turnover * nav
+        est_cost = traded_notional * 20.0 / 10_000
+        cost_str = f"${est_cost:,.2f}"
         print(f"\n  Total turnover   : {plan.total_turnover:.2%}")
-        print(f"  Estimated cost   : ~${est_cost:,.0f}  (20 bps × NAV)")
+        print(f"  Estimated cost   : ~{cost_str}  (20 bps × traded notional of ${traded_notional:,.2f})")
     else:
         print("  No orders required — portfolio already at target allocation.")
 
