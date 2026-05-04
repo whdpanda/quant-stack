@@ -59,6 +59,7 @@ def load_current_positions(inputs: dict[str, Any], ctx: ToolContext) -> dict[str
             positions=snapshot.positions,
             cash_fraction=snapshot.cash_fraction,
             source=snapshot.source,
+            position_metadata=snapshot.position_metadata,
         )
 
     ctx.positions_snapshot = snapshot
@@ -121,11 +122,11 @@ def build_rebalance_plan(inputs: dict[str, Any], ctx: ToolContext) -> dict[str, 
             "current_weight": round(cur, 4),
             "target_weight": round(tgt, 4),
             "delta_weight": round(delta, 4),
-            "delta_usd": round(delta * nav),
+            "delta_usd": round(delta * nav, 2),
         })
         total_turnover += abs(delta)
 
-    estimated_cost_usd = round(total_turnover * 20.0 / 10_000 * nav)
+    estimated_cost_usd = round(total_turnover * 20.0 / 10_000 * nav, 2)
 
     return {
         "status": "ok",
@@ -174,6 +175,7 @@ def summarize_shadow_run(inputs: dict[str, Any], ctx: ToolContext) -> dict[str, 
             positions=snapshot.positions,
             cash_fraction=snapshot.cash_fraction,
             source=snapshot.source,
+            position_metadata=snapshot.position_metadata,
         )
 
     # ── Build TargetWeights from context ───────────────────────────────
