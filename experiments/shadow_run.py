@@ -60,9 +60,11 @@ from quant_stack.execution.positions import load_positions_json
 from quant_stack.execution.service import RebalanceService
 from quant_stack.execution.shadow import ShadowExecutionService
 from quant_stack.research.strategies.sector_momentum import (
+    HysteresisMode,
     RISK_ON_UNIVERSE,
     SectorMomentumStrategy,
     WeightingScheme,
+    apply_hysteresis,
     compute_strength,
 )
 from quant_stack.research.vbt_adapter import signal_frame_to_weights
@@ -73,6 +75,7 @@ STRATEGY_NAME = "sector_momentum_210d_top3"
 MOMENTUM_WINDOW = 210
 TOP_N = 3
 VOL_WINDOW = 63
+ENTRY_MARGIN = 0.02   # hysteresis: new ETF must beat displaced ETF by >= 2pp ROC
 WEIGHTING_METHOD_DISPLAY = "BLEND_70_30 (70% equal + 30% inverse-vol)"
 UNIVERSE_TYPE_DISPLAY = "Sector / industry / thematic ETFs"
 
@@ -150,10 +153,16 @@ def _generate_target_weights(close: "pd.DataFrame") -> PortfolioWeights:
     import pandas as pd
 
     strategy = SectorMomentumStrategy(momentum_window=MOMENTUM_WINDOW, top_n=TOP_N)
-    signals = strategy.generate_signals(close)
+    raw_signals, ranks, mom_scores = strategy.generate_signals_full(close)
+    signals = apply_hysteresis(
+        raw_signals, ranks, mom_scores,
+        mode=HysteresisMode.ENTRY_MARGIN,
+        top_n=TOP_N,
+        entry_margin=ENTRY_MARGIN,
+    )
 
     # BLEND_70_30 = 70% equal-weight + 30% inverse-vol
-    strength = compute_strength(signals, close, WeightingScheme.BLEND_70_30)
+    strength = compute_strength(signals, close, WeightingScheme.BLEND_70_30, vol_window=VOL_WINDOW)
 
     sf = SignalFrame(signals=signals, strength=strength, strategy_name=strategy.name)
     weights_df = signal_frame_to_weights(sf)
@@ -253,6 +262,7 @@ def main() -> None:
             positions=snapshot.positions,
             cash_fraction=snapshot.cash_fraction,
             source=snapshot.source,
+            position_metadata=snapshot.position_metadata,
         )
 
     print(f"  NAV      : ${snapshot.nav:,.2f}")
@@ -260,10 +270,18 @@ def main() -> None:
     if snapshot.positions:
         print("  Holdings :")
         for sym, w in sorted(snapshot.positions.items(), key=lambda x: -x[1]):
-            print(f"    {sym:6s}  {w:.2%}  (${w * snapshot.nav:,.0f})")
+            mv = w * snapshot.nav
+            meta = snapshot.position_metadata.get(sym, {})
+            qty = meta.get("quantity")
+            price = meta.get("last_price_usd")
+            if qty is not None and price is not None:
+                print(f"    {sym:6s}  {w:.2%}  ({qty:4d} sh × ${price:,.2f} = ${mv:,.2f})")
+            else:
+                print(f"    {sym:6s}  {w:.2%}  (${mv:,.2f})")
     else:
         print("  Holdings : NONE — all-cash (first rebalance)")
-    print(f"  Cash     : {snapshot.cash_fraction:.2%}  (${snapshot.cash_fraction * snapshot.nav:,.0f})")
+    cash_usd = snapshot.cash_fraction * snapshot.nav
+    print(f"  Cash     : {snapshot.cash_fraction:.2%}  (${cash_usd:,.2f})")
 
     # ── Step 2: Generate current target weights ─────────────────────────────────
     print(f"\n[2/6] Generating target weights from fresh market data...")
@@ -336,8 +354,8 @@ def main() -> None:
     # ── Step 4: Print rebalance plan ───────────────────────────────────────────
     print(f"\n[4/6] Rebalance plan:")
     if plan.orders:
-        header = f"  {'Symbol':6s}  {'Side':4s}  {'Current':>8s}  {'Target':>8s}  {'Delta':>8s}  {'Delta $':>10s}"
-        sep    = f"  {'─'*6}  {'─'*4}  {'─'*8}  {'─'*8}  {'─'*8}  {'─'*10}"
+        header = f"  {'Symbol':6s}  {'Side':4s}  {'Current':>8s}  {'Target':>8s}  {'Delta':>8s}  {'Delta $':>12s}"
+        sep    = f"  {'─'*6}  {'─'*4}  {'─'*8}  {'─'*8}  {'─'*8}  {'─'*12}"
         print(header)
         print(sep)
         for o in sorted(plan.orders, key=lambda x: x.symbol):
@@ -346,12 +364,14 @@ def main() -> None:
             print(
                 f"  {o.symbol:6s}  {str(o.side).upper():4s}"
                 f"  {cur:>8.2%}  {o.target_weight:>8.2%}"
-                f"  {o.delta_weight:>+8.2%}  {delta_usd:>+10,.0f}"
+                f"  {o.delta_weight:>+8.2%}  {delta_usd:>+12,.2f}"
             )
         nav = snapshot.nav
-        est_cost = plan.total_turnover * 20.0 / 10_000 * nav
+        traded_notional = plan.total_turnover * nav
+        est_cost = traded_notional * 20.0 / 10_000
+        cost_str = f"${est_cost:,.2f}"
         print(f"\n  Total turnover   : {plan.total_turnover:.2%}")
-        print(f"  Estimated cost   : ~${est_cost:,.0f}  (20 bps × NAV)")
+        print(f"  Estimated cost   : ~{cost_str}  (20 bps × traded notional of ${traded_notional:,.2f})")
     else:
         print("  No orders required — portfolio already at target allocation.")
 

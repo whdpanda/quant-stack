@@ -47,8 +47,16 @@ class OrderSide(StrEnum):
 class PositionSnapshot(BaseModel):
     """Current portfolio state at a point in time.
 
-    ``positions`` maps symbol → fraction of NAV.
+    ``positions`` maps symbol → fraction of NAV.  This is always the authoritative
+    weight used by the strategy layer.  For amount-driven input (new format),
+    weights are derived from ``position_metadata.market_value_usd / nav``; they
+    are NOT loaded as raw percentages, so precision is preserved.
+
     ``cash_fraction + sum(positions.values())`` should ≈ 1.0.
+
+    ``position_metadata`` carries per-symbol quantity/price/market-value from the
+    input file.  It is optional and never used by the strategy layer — only by the
+    display and artifact layers.  Defaults to {} for backward compatibility.
 
     ``source`` records where this snapshot came from:
       "manual"  — hand-constructed (e.g., for testing or first run)
@@ -63,6 +71,14 @@ class PositionSnapshot(BaseModel):
     positions: dict[str, float] = Field(default_factory=dict)
     cash_fraction: float = Field(default=1.0, ge=0.0, le=1.0)
     source: str = "manual"
+    position_metadata: dict[str, dict] = Field(
+        default_factory=dict,
+        description=(
+            "Optional per-symbol metadata (quantity, last_price_usd, market_value_usd). "
+            "Populated by the amount-driven input format; empty for legacy weight format. "
+            "Never used by strategy or risk logic."
+        ),
+    )
 
 
 class TargetWeights(BaseModel):

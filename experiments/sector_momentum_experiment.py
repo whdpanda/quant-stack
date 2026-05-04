@@ -167,8 +167,9 @@ print(f"\n[LAST REBALANCE]  {last_date.date()}: {', '.join(top_etfs)}")
 
 # ── 6. Save ExperimentRecord ──────────────────────────────────────────────────
 
+_w_last = weights.loc[last_date]
 pw = PortfolioWeights(
-    weights={sym: round(1.0 / STRATEGY_PARAMS["top_n"], 4) for sym in top_etfs},
+    weights={sym: float(_w_last[sym]) for sym in top_etfs if sym in _w_last.index and pd.notna(_w_last[sym])},
     method="blend_70_30",
     rebalance_date=last_date.date(),
 )

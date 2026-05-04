@@ -82,10 +82,10 @@ class DryRunExecutionAdapter:
             f"[DRY RUN] Plan {plan.plan_id[:8]}",
             f"  strategy : {plan.decision.target.strategy_name}",
             f"  rebal    : {plan.decision.target.rebalance_date}",
-            f"  nav      : ${nav:,.0f}",
+            f"  nav      : ${nav:,.2f}",
             f"  orders   : {len(plan.orders)}",
             f"  turnover : {plan.total_turnover:.2%}",
-            f"  est cost : {plan.estimated_cost_bps:.0f} bps (~${est_cost:,.0f})",
+            f"  est cost : {plan.estimated_cost_bps:.0f} bps × traded notional (~${est_cost:,.2f})",
             "  ─────────────────────────────────────────────────────────",
         ]
         for order in sorted(plan.orders, key=lambda o: o.symbol):
@@ -94,7 +94,7 @@ class DryRunExecutionAdapter:
                 f"  [{order.side.upper():4s}] {order.symbol:6s}"
                 f"  {cur:.2%} → {order.target_weight:.2%}"
                 f"  Δ={order.delta_weight:+.2%}"
-                f"  Δ$={order.delta_value:+,.0f}"
+                f"  Δ$={order.delta_value:+,.2f}"
             )
         for entry in log:
             logger.info(entry)
