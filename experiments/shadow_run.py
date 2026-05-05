@@ -404,11 +404,17 @@ def main() -> None:
     print("=" * 70)
     if not result.success:
         print("  STATUS: BLOCKED — resolve risk violations before executing")
-    elif shadow_result.needs_rebalance:
-        print("  STATUS: REBALANCE RECOMMENDED")
-        print("  Review shadow_execution_summary.md, then execute orders manually.")
+    elif not shadow_result.needs_rebalance:
+        print("  STATUS: NO REBALANCE NEEDED — portfolio matches target allocation")
+    elif shadow_result.is_scheduled_rebalance_day and shadow_result.executable_count > 0:
+        print("  STATUS: REBALANCE RECOMMENDED — scheduled window, orders ready")
+        print("  Review shadow_execution_summary.md, then place orders at your broker.")
+    elif shadow_result.is_scheduled_rebalance_day:
+        print("  STATUS: SCHEDULED WINDOW — no broker-executable orders (whole-share constraint)")
+        print("  Review D.2 in shadow_execution_summary.md for execution options.")
     else:
-        print("  STATUS: NO REBALANCE NEEDED")
+        print("  STATUS: MONITORING — signal drift detected, not a scheduled rebalance day")
+        print("  Review shadow_execution_summary.md for next scheduled window.")
     print()
     print("  Human review file:")
     print(f"    {shadow_result.artifacts['shadow_execution_summary']}")

@@ -270,9 +270,10 @@ class TestEstQtyUsesCorrectBase:
 
             # Extract Est. Qty from the markdown table
             # Row format: | SYMBOL | BUY | $notional | $price | qty | $residual |
+            # Notional is rendered as {:,.2f} so the pattern must allow decimal points.
             pattern = (
                 rf"\|\s*{o.symbol}\s*\|\s*BUY\s*\|"
-                rf"\s*\$[0-9,]+\s*\|\s*\$[0-9,.]+\s*\|"
+                rf"\s*\$[0-9,.]+\s*\|\s*\$[0-9,.]+\s*\|"
                 rf"\s*([0-9,]+)\s*\|"
             )
             match = re.search(pattern, summary)
@@ -335,7 +336,7 @@ class TestCashNoteConsistency:
         plan_json = json.loads(
             (shadow_result.artifacts["rebalance_plan"]).read_text(encoding="utf-8")
         )
-        reported_net = plan_json["summary"]["net_cash_needed_usd"]
+        reported_net = plan_json["summary"]["est_total_cash_needed_usd"]
         assert abs(reported_net - expected_net) <= 1.0, (
             f"net_cash_needed ${reported_net:.2f} should be ≈ ${expected_net:.2f}"
         )

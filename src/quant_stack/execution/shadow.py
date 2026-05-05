@@ -45,7 +45,9 @@ class ShadowRunResult:
     result: ExecutionResult
     artifacts: dict[str, Path] = field(default_factory=dict)
     summary_text: str = ""
-    needs_rebalance: bool = False
+    needs_rebalance: bool = False           # signal drift > threshold AND no risk block
+    is_scheduled_rebalance_day: bool = False  # signal_date == last bday of a rebalance month
+    executable_count: int = 0              # orders surviving whole-share constraint
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -238,6 +240,12 @@ class ShadowExecutionService:
         plan, result = self.service.run(target, snapshot)
         needs_rebalance = len(plan.orders) > 0 and result.success
 
+        # Schedule gate — computed at service level so all consumers share one source of truth
+        sched_info = _rebalance_schedule_info(target.rebalance_date, rebalance_freq)
+        is_scheduled = sched_info["is_scheduled_rebalance_day"]
+        zero_qty = _compute_zero_qty_symbols(plan.orders, latest_prices, snapshot.nav)
+        executable_count = len(plan.orders) - len(zero_qty)
+
         log_event(
             "service_completed",
             plan_id=plan.plan_id[:8],
@@ -245,6 +253,8 @@ class ShadowExecutionService:
             turnover=round(plan.total_turnover, 4),
             success=result.success,
             needs_rebalance=needs_rebalance,
+            is_scheduled_rebalance_day=is_scheduled,
+            executable_count=executable_count,
         )
 
         artifacts: dict[str, Path] = {}
@@ -353,6 +363,8 @@ class ShadowExecutionService:
             artifacts=artifacts,
             summary_text=summary_text,
             needs_rebalance=needs_rebalance,
+            is_scheduled_rebalance_day=is_scheduled,
+            executable_count=executable_count,
         )
 
 
@@ -1174,6 +1186,12 @@ def _build_summary_markdown(
             "Current portfolio matches the target allocation"
             f" (all diffs below the {self_min_trade_size_display(plan)} minimum threshold).",
             "No action required this cycle.",
+            "",
+        ]
+    elif not is_scheduled:
+        L += [
+            "> This is a **dry-run** monitoring run. No orders have been or will be submitted automatically.",
+            f"> Next scheduled rebalance window: {sched['next_rebalance_window']}.",
             "",
         ]
     else:
