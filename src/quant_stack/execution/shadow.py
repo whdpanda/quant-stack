@@ -66,6 +66,86 @@ def _fmt_cost(usd: float) -> str:
     return f"${usd:,.2f}"
 
 
+def _rebalance_schedule_info(signal_date: date, rebalance_freq: str = "2ME") -> dict:
+    """Return schedule context for signal_date relative to the formal rebalance calendar.
+
+    For "2ME" anchored at 2010-01-01: rebalance months = Jan Mar May Jul Sep Nov.
+    Returns:
+      is_scheduled_rebalance_day  — True only if signal_date == last business day of a 2ME month
+      in_rebalance_month          — True if signal_date's month is a rebalance month
+      rebalance_frequency_display — human-readable frequency string
+      current_month_last_bday     — last business day of signal_date's month (if rebalance month)
+      next_rebalance_window       — display string for the next upcoming rebalance date
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        return {
+            "is_scheduled_rebalance_day": False,
+            "in_rebalance_month": False,
+            "rebalance_frequency_display": f"Unknown ({rebalance_freq})",
+            "current_month_last_bday": None,
+            "next_rebalance_window": "unavailable (pandas not installed)",
+        }
+
+    signal_ts = pd.Timestamp(signal_date)
+    look_ahead = signal_ts + pd.DateOffset(months=8)
+    all_me_dates = pd.date_range(start="2010-01-01", end=look_ahead, freq=rebalance_freq)
+    rebalance_ym_set = {(d.year, d.month) for d in all_me_dates}
+
+    in_rebalance_month = (signal_ts.year, signal_ts.month) in rebalance_ym_set
+
+    # Last business day of signal_date's month: walk back from calendar month-end
+    month_end = (signal_ts + pd.offsets.MonthEnd(0)).date()
+    lbd = month_end
+    while lbd.weekday() >= 5:  # 5=Sat, 6=Sun
+        lbd -= timedelta(days=1)
+    is_scheduled = in_rebalance_month and (signal_date == lbd)
+
+    # Next rebalance window: first 2ME month-end after signal_date → its last business day
+    future = sorted(dt.date() for dt in all_me_dates if dt.date() > signal_date)
+    if future:
+        next_me = future[0]
+        next_lbd = next_me
+        while next_lbd.weekday() >= 5:
+            next_lbd -= timedelta(days=1)
+        month_label = pd.Timestamp(next_me).strftime("%b %Y")
+        next_window = f"~{next_lbd} (last business day of {month_label})"
+    else:
+        next_window = "unavailable"
+
+    _freq_label: dict[str, str] = {
+        "2ME": "Bi-monthly (2ME) — Jan · Mar · May · Jul · Sep · Nov month-end",
+        "ME":  "Monthly (ME) — every month-end",
+        "QE":  "Quarterly (QE) — every quarter-end",
+    }
+    return {
+        "is_scheduled_rebalance_day": is_scheduled,
+        "in_rebalance_month": in_rebalance_month,
+        "rebalance_frequency_display": _freq_label.get(rebalance_freq, rebalance_freq),
+        "current_month_last_bday": str(lbd) if in_rebalance_month else None,
+        "next_rebalance_window": next_window,
+    }
+
+
+def _compute_zero_qty_symbols(
+    orders: "list[Any]",
+    latest_prices: "dict[str, float] | None",
+    nav: float,
+) -> "list[str]":
+    """Return buy-order symbols where floor(notional / ref_price) == 0 (whole-share constraint)."""
+    if not latest_prices:
+        return []
+    zero: list[str] = []
+    for o in orders:
+        if o.delta_weight > 0:
+            notional = o.delta_weight * nav
+            price = latest_prices.get(o.symbol)
+            if price and price > 0 and math.floor(notional / price) == 0:
+                zero.append(o.symbol)
+    return zero
+
+
 # ── Service ───────────────────────────────────────────────────────────────────
 
 class ShadowExecutionService:
@@ -102,6 +182,7 @@ class ShadowExecutionService:
         universe: list[str] | None = None,
         universe_type: str = "",
         latest_prices: dict[str, float] | None = None,
+        rebalance_freq: str = "2ME",
     ) -> ShadowRunResult:
         """Run one shadow execution cycle and persist the full artifact set.
 
@@ -223,6 +304,7 @@ class ShadowExecutionService:
             universe=universe,
             universe_type=universe_type,
             latest_prices=latest_prices,
+            rebalance_freq=rebalance_freq,
         )
         summary_path = run_dir / "shadow_execution_summary.md"
         summary_path.write_text(summary_text, encoding="utf-8")
@@ -634,6 +716,7 @@ def _build_summary_markdown(
     universe: list[str] | None = None,
     universe_type: str = "",
     latest_prices: dict[str, float] | None = None,
+    rebalance_freq: str = "2ME",
 ) -> str:
     nav = snapshot.nav
     buy_orders = [o for o in plan.orders if str(o.side) == "buy"]
@@ -651,15 +734,41 @@ def _build_summary_markdown(
     _cash_check = next((c for c in risk_data["checks"] if c["check"] == "cash_sufficiency"), {})
     has_fee_shortfall = _cash_check.get("fee_shortfall_usd", 0.0) > 0.01
 
+    # Pre-compute schedule info and broker-executable counts (needed for recommendation + F section)
+    sched = _rebalance_schedule_info(market_data_date, rebalance_freq)
+    is_scheduled = sched["is_scheduled_rebalance_day"]
+    in_rebalance_month = sched["in_rebalance_month"]
+    zero_qty_symbols = _compute_zero_qty_symbols(plan.orders, latest_prices, nav)
+    executable_count = len(plan.orders) - len(zero_qty_symbols)
+
     if not result.success:
         recommendation = "BLOCKED -- execution blocked (kill switch or risk violation). Review risk checks."
         action = "**Do NOT execute** until violations are resolved."
     elif not needs_rebalance:
         recommendation = "No rebalance required -- portfolio already matches target allocation."
         action = "No action needed this cycle."
+    elif not is_scheduled:
+        recommendation = (
+            f"Monitoring run — not a scheduled rebalance day. "
+            f"Strategy signals {len(plan.orders)} adjustment(s); informational only."
+        )
+        action = (
+            f"No execution required today. "
+            f"Next scheduled rebalance window: {sched['next_rebalance_window']}."
+        )
+    elif executable_count == 0:
+        recommendation = (
+            f"Scheduled rebalance day — strategy recommends {len(plan.orders)} adjustment(s), "
+            f"but no orders are broker-executable under whole-share constraints."
+        )
+        action = (
+            "No broker orders to place today. "
+            "See D.2 for execution options (notional override, accumulated residual, or fractional-share support)."
+        )
     elif has_cash_warning:
         recommendation = (
-            f"Strategy recommends {len(plan.orders)} trade adjustment(s), "
+            f"Scheduled rebalance — {len(plan.orders)} strategy adjustment(s), "
+            f"{executable_count} broker-executable, "
             "subject to resolving the cash shortfall noted in Section D."
         )
         action = (
@@ -667,8 +776,11 @@ def _build_summary_markdown(
             "before placing orders, then execute manually at your broker."
         )
     else:
-        recommendation = f"Strategy recommends {len(plan.orders)} trade adjustment(s)."
-        action = "Review the order plan, then execute manually at your broker if approved."
+        recommendation = (
+            f"Scheduled rebalance — {len(plan.orders)} strategy adjustment(s), "
+            f"{executable_count} broker-executable order(s)."
+        )
+        action = "Review the order plan (Section D), then execute manually at your broker."
 
     # ── Section A: Basic Information ──────────────────────────────────────────
     L: list[str] = [
@@ -697,7 +809,21 @@ def _build_summary_markdown(
         f"| Shadow Run ID | `{run_id}` |",
         f"| Current NAV | ${nav:,.2f} |",
         f"| Execution Mode | `{result.adapter_mode}` (dry-run, no orders submitted) |",
+        f"| Rebalance Schedule | {sched['rebalance_frequency_display']} |",
     ]
+    # Is Scheduled Rebalance Day — show context depending on where in the cycle we are
+    if is_scheduled:
+        L.append("| Is Scheduled Rebalance Day | **Yes** |")
+        L.append(f"| Next Scheduled Window | {sched['next_rebalance_window']} |")
+    elif in_rebalance_month:
+        L.append(
+            f"| Is Scheduled Rebalance Day | **No** — monitoring run"
+            f" (rebalance month: window opens ~{sched['current_month_last_bday']}) |"
+        )
+        L.append(f"| Next Scheduled Window | {sched['next_rebalance_window']} |")
+    else:
+        L.append("| Is Scheduled Rebalance Day | **No** — monitoring run |")
+        L.append(f"| Next Scheduled Window | {sched['next_rebalance_window']} |")
 
     # ── Section B: Current Positions ──────────────────────────────────────────
     L += [
@@ -887,8 +1013,6 @@ def _build_summary_markdown(
             "> based on yesterday's close and will be wrong if the price has moved.",
         ]
 
-        zero_qty_symbols: list[str] = []
-
         if buy_orders_sorted:
             if has_prices:
                 L += [
@@ -904,8 +1028,6 @@ def _build_summary_markdown(
                         qty = math.floor(sug_notional / price)
                         residual = sug_notional - qty * price
                         total_residual += residual
-                        if qty == 0:
-                            zero_qty_symbols.append(o.symbol)
                         L.append(
                             f"| {o.symbol} | BUY | ${sug_notional:,.2f} "
                             f"| ${price:,.2f} | {qty:,} | ${residual:,.2f} |"
@@ -1003,6 +1125,22 @@ def _build_summary_markdown(
     ]
 
     if plan.orders:
+        # Execution count summary table — shows strategy layer vs broker-executable layer
+        exec_syms = [o.symbol for o in plan.orders if o.symbol not in zero_qty_symbols]
+        L += [
+            "**Execution Counts:**",
+            "",
+            "| Layer | Count | Symbols |",
+            "|-------|------:|---------|",
+            f"| Strategy adjustments | {len(plan.orders)} | {', '.join(o.symbol for o in plan.orders)} |",
+            f"| Broker-executable orders | {executable_count} | {', '.join(exec_syms) if exec_syms else '—'} |",
+        ]
+        if zero_qty_symbols:
+            L.append(
+                f"| Not executable (whole-share) | {len(zero_qty_symbols)} | {', '.join(zero_qty_symbols)} |"
+            )
+        L.append("")
+
         entering = [o.symbol for o in buy_orders if snapshot.positions.get(o.symbol, 0) < 0.005]
         exiting = [o.symbol for o in sell_orders if o.target_weight < 0.005]
         reweighting = [
@@ -1018,7 +1156,6 @@ def _build_summary_markdown(
         if not sell_orders:
             L.append("- **Cash-only rebalance:** no sells required — all trades funded from available cash.")
         if zero_qty_symbols:
-            executable_count = len(plan.orders) - len(zero_qty_symbols)
             L.append(
                 f"- **Whole-share note:** strategy recommends {len(plan.orders)} trade adjustment(s); "
                 f"{len(zero_qty_symbols)} ({', '.join(zero_qty_symbols)}) round(s) to 0 shares at the reference price — "

@@ -76,6 +76,7 @@ MOMENTUM_WINDOW = 210
 TOP_N = 3
 VOL_WINDOW = 63
 ENTRY_MARGIN = 0.02   # hysteresis: new ETF must beat displaced ETF by >= 2pp ROC
+REBALANCE_FREQ = "2ME"  # bi-monthly month-end; must match sector_momentum_experiment.py
 WEIGHTING_METHOD_DISPLAY = "BLEND_70_30 (70% equal + 30% inverse-vol)"
 UNIVERSE_TYPE_DISPLAY = "Sector / industry / thematic ETFs"
 
@@ -346,6 +347,7 @@ def main() -> None:
         universe=RISK_ON_UNIVERSE,
         universe_type=UNIVERSE_TYPE_DISPLAY,
         latest_prices=latest_prices,
+        rebalance_freq=REBALANCE_FREQ,
     )
 
     plan = shadow_result.plan
