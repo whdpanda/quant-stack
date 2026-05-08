@@ -1,4 +1,9 @@
-"""Minimal Stooq EOD close downloader."""
+"""Minimal Stooq EOD close downloader.
+
+Contract: this module returns close-only price frames for Stooq-backed
+monitoring flows. It must not write local cache files, synthesize OHLCV bars
+from closes, or create yfinance-style ``data/{ticker}.parquet`` files.
+"""
 
 from __future__ import annotations
 
@@ -30,7 +35,12 @@ def fetch_stooq_close(
     max_missing_days: int = DEFAULT_MAX_MISSING_DAYS,
     min_rows: int | None = None,
 ) -> pd.DataFrame:
-    """Return daily close prices from Stooq with original ticker columns."""
+    """Return daily close prices from Stooq with original ticker columns.
+
+    The returned frame is close-only: columns are exactly the requested ticker
+    symbols, not ``open/high/low/close/volume``. This helper intentionally has
+    no parquet/cache side effects.
+    """
     if not symbols:
         raise DataProviderError("Stooq close download requires at least one ticker")
 

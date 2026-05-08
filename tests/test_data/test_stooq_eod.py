@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from io import BytesIO
 
+import pandas as pd
 import pytest
 
 from quant_stack.core.exceptions import DataProviderError
@@ -146,20 +147,34 @@ def test_fetch_stooq_close_does_not_write_yahoo_ohlcv_cache(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
+    def fail_to_parquet(self: pd.DataFrame, *args: object, **kwargs: object) -> None:
+        del self, args, kwargs
+        raise AssertionError("Stooq close helper must not write parquet cache")
+
     def fake_urlopen(url: str, timeout: int) -> _FakeResponse:
         del url, timeout
-        return _FakeResponse("Date,Open,High,Low,Close,Volume\n2024-01-02,1,1,1,10.5,100\n")
+        return _FakeResponse(
+            "Date,Open,High,Low,Close,Volume\n"
+            "2024-01-02,1,2,0.5,10.5,100\n"
+            "2024-01-03,2,3,1.5,10.6,200\n"
+        )
 
     monkeypatch.setattr(stooq_eod, "urlopen", fake_urlopen)
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", fail_to_parquet)
     monkeypatch.chdir(tmp_path)
 
-    stooq_eod.fetch_stooq_close(
+    close = stooq_eod.fetch_stooq_close(
         ["XLF"],
         start=date(2024, 1, 1),
         end=date(2024, 1, 31),
         max_retries=0,
     )
 
+    assert close.columns.tolist() == ["XLF"]
+    assert close.index.strftime("%Y-%m-%d").tolist() == ["2024-01-02", "2024-01-03"]
+    assert close["XLF"].tolist() == [10.5, 10.6]
+    assert not {"open", "high", "low", "close", "volume"}.intersection(close.columns)
+    assert not (tmp_path / "data").exists()
     assert not (tmp_path / "data" / "XLF.parquet").exists()
 
 
