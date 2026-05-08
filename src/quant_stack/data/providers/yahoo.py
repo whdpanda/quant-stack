@@ -11,6 +11,9 @@ from quant_stack.core.exceptions import DataProviderError
 from quant_stack.core.schemas import DataConfig
 from quant_stack.data.base import DataProvider
 
+OHLCV_COLUMNS = ["open", "high", "low", "close", "volume"]
+CACHE_VALIDATION_WINDOW = 5
+
 
 class YahooProvider(DataProvider):
     """Fetch OHLCV data from Yahoo Finance via yfinance.
@@ -70,15 +73,62 @@ class YahooProvider(DataProvider):
             df.columns = [c.lower() for c in df.columns]
         df.index = pd.to_datetime(df.index)
         df.index.name = "date"
-        return df[["open", "high", "low", "close", "volume"]]
+        return df[OHLCV_COLUMNS]
 
     @staticmethod
     def _load_cache(path: Path, config: DataConfig) -> pd.DataFrame | None:
-        """Return cached DataFrame if it covers the requested date range."""
+        """Return cached yfinance OHLCV DataFrame if it is valid and complete."""
         if not path.exists():
             return None
         df = pd.read_parquet(path)
+        df = YahooProvider._validate_cache_frame(df, path)
+        if df is None:
+            return None
         if df.index.min().date() <= config.start and df.index.max().date() >= config.end:
             mask = (df.index.date >= config.start) & (df.index.date <= config.end)
             return df.loc[mask]
         return None  # cache is stale or incomplete
+
+    @staticmethod
+    def _validate_cache_frame(df: pd.DataFrame, path: Path) -> pd.DataFrame | None:
+        """Reject cache files that are not credible yfinance OHLCV data."""
+        if not isinstance(df.index, pd.DatetimeIndex):
+            logger.warning(f"Ignoring invalid Yahoo cache {path}: index is not DatetimeIndex")
+            return None
+
+        df = df.copy()
+        if isinstance(df.columns, pd.MultiIndex):
+            logger.warning(f"Ignoring invalid Yahoo cache {path}: columns are MultiIndex")
+            return None
+
+        df.columns = [str(col).strip().lower() for col in df.columns]
+        missing = [col for col in OHLCV_COLUMNS if col not in df.columns]
+        if missing:
+            logger.warning(f"Ignoring invalid Yahoo cache {path}: missing OHLCV columns {missing}")
+            return None
+
+        df = df[OHLCV_COLUMNS].sort_index()
+        if df.empty or df.index.hasnans:
+            logger.warning(f"Ignoring invalid Yahoo cache {path}: empty or invalid date index")
+            return None
+
+        numeric = df.apply(pd.to_numeric, errors="coerce")
+        if numeric[OHLCV_COLUMNS].isna().any().any():
+            logger.warning(f"Ignoring invalid Yahoo cache {path}: non-numeric OHLCV values")
+            return None
+
+        latest = numeric.tail(CACHE_VALIDATION_WINDOW)
+        same_ohlc = (
+            latest["open"].eq(latest["high"])
+            & latest["open"].eq(latest["low"])
+            & latest["open"].eq(latest["close"])
+        )
+        zero_volume = latest["volume"].eq(0)
+        if not latest.empty and (same_ohlc & zero_volume).all():
+            logger.warning(
+                f"Ignoring suspected synthetic Yahoo cache {path}: "
+                "latest rows have open=high=low=close and volume=0"
+            )
+            return None
+
+        return numeric
