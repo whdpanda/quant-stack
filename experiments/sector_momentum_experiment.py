@@ -38,8 +38,8 @@ from datetime import date
 import pandas as pd
 from loguru import logger
 
-from quant_stack.core.schemas import DataConfig, ExperimentRecord, PortfolioWeights
-from quant_stack.data.providers.yahoo import YahooProvider
+from quant_stack.core.schemas import ExperimentRecord, PortfolioWeights
+from quant_stack.data.stooq_eod import fetch_stooq_close
 from quant_stack.research.strategies.sector_momentum import (
     HysteresisMode,
     RISK_ON_UNIVERSE,
@@ -80,17 +80,13 @@ print("  Sector ETF Momentum — Formal Strategy (blend_70_30)")
 print("=" * 60)
 
 all_syms = list(dict.fromkeys(RISK_ON_UNIVERSE + [BENCHMARK]))
-cfg = DataConfig(
-    symbols=all_syms, start=PERIOD_START, end=PERIOD_END, cache_dir="./data"
-)
-
 logger.info(f"Fetching {len(RISK_ON_UNIVERSE)} risk-on ETFs + benchmark...")
-raw = YahooProvider().fetch(cfg)
-
-if isinstance(raw.columns, pd.MultiIndex):
-    close_all = raw.xs("close", axis=1, level=1)
-else:
-    close_all = raw[["close"]].rename(columns={"close": all_syms[0]})
+close_all = fetch_stooq_close(
+    all_syms,
+    start=PERIOD_START,
+    end=PERIOD_END,
+    min_rows=STRATEGY_PARAMS["momentum_window"] + 1,
+)
 
 close_all = close_all.sort_index().dropna(how="all")
 close     = close_all[RISK_ON_UNIVERSE].copy()

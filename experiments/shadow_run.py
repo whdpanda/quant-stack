@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -54,6 +54,7 @@ from loguru import logger
 # ── Imports from quant_stack ───────────────────────────────────────────────────
 from quant_stack.core.config import AppConfig, load_config
 from quant_stack.core.schemas import PortfolioWeights
+from quant_stack.data.stooq_eod import fetch_stooq_close
 from quant_stack.execution.adapters import DryRunExecutionAdapter
 from quant_stack.execution.domain import PositionSnapshot, target_weights_from_portfolio_weights
 from quant_stack.execution.positions import load_positions_json
@@ -72,6 +73,7 @@ from quant_stack.signals.base import SignalFrame
 
 # ── Strategy constants (must match formal strategy; do NOT change) ─────────────
 STRATEGY_NAME = "sector_momentum_210d_top3"
+PERIOD_START = date(2010, 1, 1)
 MOMENTUM_WINDOW = 210
 TOP_N = 3
 VOL_WINDOW = 63
@@ -86,56 +88,36 @@ SHADOW_DIR = Path("shadow_artifacts")
 EXECUTION_ARTIFACTS_DIR = Path("execution_artifacts")
 
 
-def _download_fresh_prices(symbols: list[str], lookback_days: int = 350) -> "pd.DataFrame":
-    """Download recent adjusted close prices from Yahoo Finance."""
-    import pandas as pd
-
-    try:
-        import yfinance as yf
-    except ImportError:
-        raise ImportError(
-            "yfinance is required for live signal generation.\n"
-            "Install it with: pip install yfinance"
-        )
-
+def _download_fresh_prices(symbols: list[str]) -> "pd.DataFrame":
+    """Download recent close prices from Stooq."""
     end = date.today()
-    # extra buffer for weekends/holidays/missing sessions
-    start = end - timedelta(days=lookback_days + 120)
+    start = PERIOD_START
 
-    logger.info(f"Downloading prices for {symbols} ({start} to {end})")
-    raw = yf.download(
+    logger.info(f"Downloading prices from Stooq for {symbols} ({start} to {end})")
+    close = fetch_stooq_close(
         symbols,
-        start=str(start),
-        end=str(end),
-        auto_adjust=True,
-        progress=False,
+        start=start,
+        end=end,
+        min_rows=MOMENTUM_WINDOW + 1,
     )
-
-    if raw is None or raw.empty:
-        raise RuntimeError(
-            "yfinance returned empty data. Check internet connection and symbol list."
-        )
-
-    # yfinance 1.x returns MultiIndex columns by default: (type, ticker).
-    # raw["Close"] selects by first level and returns a ticker-column DataFrame.
-    # For a flat-column result (single ticker or older yfinance), "Close" is a direct key.
-    if isinstance(raw.columns, pd.MultiIndex):
-        close = raw["Close"]
-    elif "Close" in raw.columns:
-        close = raw[["Close"]].droplevel(0, axis=1) if isinstance(raw["Close"], pd.DataFrame) else raw["Close"]
-    else:
-        close = raw
-
-    if isinstance(close, pd.Series):
-        close = close.to_frame(symbols[0])
 
     # Drop all-NaN rows; reorder to canonical universe order
     close = close.dropna(how="all")
     available = [s for s in symbols if s in close.columns]
     missing = [s for s in symbols if s not in close.columns]
     if missing:
-        logger.warning(f"Symbols not returned by yfinance: {missing}")
+        raise RuntimeError(f"Symbols not returned by Stooq: {missing}")
+    if close[available].tail(MOMENTUM_WINDOW + 1).isna().any().any():
+        raise RuntimeError("Stooq returned NaN values inside the required momentum window.")
     return close[available]
+
+
+def _is_execution_ready_rebalance(shadow_result) -> bool:
+    return (
+        shadow_result.needs_rebalance
+        and shadow_result.is_scheduled_rebalance_day
+        and shadow_result.executable_count > 0
+    )
 
 
 def _generate_target_weights(close: "pd.DataFrame") -> PortfolioWeights:
@@ -292,7 +274,7 @@ def main() -> None:
     print(f"  Weighting        : BLEND_70_30 (70% equal + 30% inverse-vol)")
 
     try:
-        close = _download_fresh_prices(RISK_ON_UNIVERSE, lookback_days=MOMENTUM_WINDOW + 100)
+        close = _download_fresh_prices(RISK_ON_UNIVERSE)
     except Exception as exc:
         print(f"\n  ERROR: Could not download price data: {exc}")
         print("  Check your internet connection and try again.")
@@ -353,9 +335,15 @@ def main() -> None:
     plan = shadow_result.plan
     result = shadow_result.result
 
-    # ── Step 4: Print rebalance plan ───────────────────────────────────────────
-    print(f"\n[4/6] Rebalance plan:")
-    if plan.orders:
+    # ── Step 4: Print rebalance plan / monitoring diffs ───────────────────────
+    execution_ready = _is_execution_ready_rebalance(shadow_result)
+    if shadow_result.is_scheduled_rebalance_day:
+        print(f"\n[4/6] Execution-ready rebalance plan:")
+    else:
+        print(f"\n[4/6] Monitoring only:")
+        print("  Not a scheduled rebalance date. Target weights are shown for monitoring only.")
+
+    if plan.orders and shadow_result.is_scheduled_rebalance_day:
         header = f"  {'Symbol':6s}  {'Side':4s}  {'Current':>8s}  {'Target':>8s}  {'Delta':>8s}  {'Delta $':>12s}"
         sep    = f"  {'─'*6}  {'─'*4}  {'─'*8}  {'─'*8}  {'─'*8}  {'─'*12}"
         print(header)
@@ -374,6 +362,10 @@ def main() -> None:
         cost_str = f"${est_cost:,.2f}"
         print(f"\n  Total turnover   : {plan.total_turnover:.2%}")
         print(f"  Estimated cost   : ~{cost_str}  (20 bps × traded notional of ${traded_notional:,.2f})")
+    elif plan.orders:
+        print(f"  Strategy drift    : {len(plan.orders)} adjustment(s)")
+        print(f"  Total turnover    : {plan.total_turnover:.2%}")
+        print("  Execution status  : monitoring only; no formal execution-ready plan today.")
     else:
         print("  No orders required — portfolio already at target allocation.")
 
@@ -406,7 +398,7 @@ def main() -> None:
         print("  STATUS: BLOCKED — resolve risk violations before executing")
     elif not shadow_result.needs_rebalance:
         print("  STATUS: NO REBALANCE NEEDED — portfolio matches target allocation")
-    elif shadow_result.is_scheduled_rebalance_day and shadow_result.executable_count > 0:
+    elif execution_ready:
         print("  STATUS: REBALANCE RECOMMENDED — scheduled window, orders ready")
         print("  Review shadow_execution_summary.md, then place orders at your broker.")
     elif shadow_result.is_scheduled_rebalance_day:
